@@ -190,6 +190,35 @@ explicit errors, and injected clocks for testable timing. Avoid exceptions,
 unbounded blocking, dynamic allocation in steady-state control paths, global
 mutable state, boolean state soup, and hidden hardware side effects.
 
+## Core concepts
+
+- Composition roots own concrete objects and connect narrow policy-free
+  boundaries; dependencies point from application and hardware adapters toward
+  pure domain/runtime code.
+- Explicit state and typed results replace toggles, implicit ownership,
+  exception-driven control flow, and ambiguous boolean state combinations.
+- Caller-supplied monotonic time keeps scheduling, safety deadlines, and tests
+  deterministic without hidden clock reads.
+- Fixed-capacity storage and bounded work make MCU memory and timing behavior
+  reviewable before deployment.
+- MicroWorld is an independent lifecycle/tick package under `lib/microworld`;
+  the tutorial may consume a pinned release later but must not redesign it
+  during a lesson.
+
+## Code documentation and formatting
+
+- Format maintained C/C++ files with the tracked `clang-format` policy. Because
+  the filename has no leading dot, invoke it explicitly with
+  `clang-format --style=file:clang-format`.
+- Document every function declaration and every persistent, shared,
+  configuration, or state variable with why it exists, the ownership/lifecycle
+  boundary it protects, or the invariant it makes observable.
+- Use behavior-specific names for local variables. Add a local comment only
+  when the reason, safety constraint, or edge case is not clear from code;
+  never narrate obvious assignments or control flow.
+- Every scoped `AGENTS.md` describes the architecture, concepts, dependency
+  direction, and verification owned by its directory.
+
 ## Safety invariants
 
 Code controlling water is safety-critical. Preserve these invariants through

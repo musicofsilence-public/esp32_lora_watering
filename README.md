@@ -22,6 +22,10 @@ The controller and valve firmware are not implemented yet. `src/main.cpp` is the
 first ESP-IDF learning exercise: blinking an external LED. No button, E32 link,
 valve driver, or real valve behavior has been validated by this repository.
 
+MicroWorld 0.1.0 is implemented as an independent C++17 package under
+`lib/microworld`. It is not linked into `src/main.cpp` and the ESP32 tutorial
+has not begun consuming it.
+
 ## Confirmed platform
 
 - ESP32-S3-WROOM-1-N16R8
@@ -46,6 +50,7 @@ step.
 
 - [Learning guide](docs/esp32-lora-remote-controller-learning-guide.md)
 - [Learning and measurement log](LEARNING_LOG.md)
+- [Standalone MicroWorld framework](lib/microworld/README.md)
 - [Contributor and safety rules](AGENTS.md)
 
 ## Safety
