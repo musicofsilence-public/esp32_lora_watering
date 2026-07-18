@@ -1,262 +1,334 @@
-# ESP32 LoRa Watering — Contributor Guide
+# ESP32 LoRa Remote Valve Controller — Contributor Guide
 
 ## Project purpose
 
-Build a reliable remote watering system while teaching the owner ESP32
-development step by step. The repository must grow from small, observable
-experiments into production-quality firmware without hiding the reasoning behind
-the design.
+Build a reliable two-device remote valve controller while teaching the owner
+ESP32 development from first principles. The repository must progress through
+small, observable experiments into production-quality firmware without hiding
+the reasoning, measurements, or safety decisions.
 
-The finished system has two ESP32-S3 devices:
+The product is behaviorally inspired by the read-only project at
+`C:\Users\Public\Arduino\RadioRemoteController`:
 
-- A battery-powered **field node** measures soil moisture and battery voltage,
-  makes safe local watering decisions, controls a valve, exchanges messages over
-  an E32 LoRa radio, and spends most of its time in deep sleep.
-- An always-on **base station** bridges LoRa telemetry and commands to MQTT over
-  Wi-Fi. It lets a dashboard or phone observe the node and request watering.
+- A **controller unit** reads a momentary wall button. Holding the button
+  expresses OPEN intent; releasing it expresses CLOSED intent.
+- A **valve unit** receives that intent over E32 LoRa, applies a fail-closed
+  safety policy, drives a reviewed external circuit for a 24 V solenoid valve,
+  and reports its applied electrical output and safety state.
 
-The field node must remain useful when the base station, Wi-Fi, MQTT broker, or
-internet is unavailable. Remote communication improves the system; it must not
-be a single point of failure for basic watering.
+The reference is not a source to port literally. It uses Arduino Uno/Nano,
+nRF24L01-specific behavior, conflicting pin/driver documentation, and
+unvalidated hardware. This repository uses ESP32-S3, native ESP-IDF, modern
+C++, PlatformIO, and an explicit E32 protocol.
 
-The detailed learning roadmap is in
-`docs/esp32-lora-watering-daily-guide.md`. Treat it as the source for product
-goals, safety reasoning, experiments, and acceptance checks—not as directly
-compilable code for this repository.
+The detailed learning sequence is in
+`docs/esp32-lora-remote-controller-learning-guide.md`. Record predictions,
+measurements, failure results, and accepted decisions in `LEARNING_LOG.md`.
 
-## Current state
+## Product behavior
 
-The application is intentionally almost empty. `src/main.c` contains only an
-empty `app_main()`. Build configuration for the real module is established and
-has been verified with PlatformIO.
+The target system must:
 
-Accepted technical decisions:
+1. Start both units with CLOSED intent.
+2. Keep the valve output electrically OFF through power-up, reset, boot, error,
+   watchdog, and radio-recovery paths.
+3. Require a stable released button before accepting a fresh OPEN press after
+   controller boot.
+4. Send explicit, idempotent OPEN/CLOSED state; never send a toggle command.
+5. Send an immediate button-edge message and a periodic desired-state heartbeat
+   so a lost press or release is repaired.
+6. Report the valve unit's applied driver output and safety state. Do not call
+   this physical valve position or water flow without a sensor.
+7. Close on sustained link loss while open.
+8. Enforce a hard continuous-open limit that repeated OPEN messages cannot
+   extend.
+9. Reject corrupted, malformed, stale, duplicated, replayed, out-of-range, or
+   unauthenticated commands before they reach output control.
+10. Prevent an old OPEN heartbeat from reopening after a fail-closed trip.
+    Recovery requires valid CLOSED intent followed by a later fresh OPEN edge.
+11. Recover transport failures in a bounded, observable way without letting
+    radio reinitialization change valve state.
 
-- Confirmed module: **ESP32-S3-WROOM-1-N16R8**
+The heartbeat cadence, link-loss timeout, maximum-open duration, retry policy,
+and recovery timing are unresolved safety/protocol decisions. Do not inherit
+the reference's one-second, five-second, or five-minute values without
+measurement and explicit approval.
+
+## Current repository state
+
+The application is at the first hardware learning exercise.
+`src/main.cpp` blinks an external LED on GPIO10 using ESP-IDF GPIO and FreeRTOS
+APIs. GPIO10 is an experiment-specific value, not an accepted product pin. Do
+not flash or wire that exercise until GPIO10 is verified against the exact
+carrier board.
+
+Established technical decisions:
+
+- Module: **ESP32-S3-WROOM-1-N16R8**
   - 16 MiB Quad-SPI flash
   - 8 MiB Octal-SPI PSRAM
 - Framework: **ESP-IDF**, not Arduino
+- Language for new application work: modern C++
 - Build orchestration: **PlatformIO**
-- PlatformIO board definition: `esp32-s3-devkitc-1`, with explicit N16R8
-  overrides in `platformio.ini` and `sdkconfig.defaults`
+- Current board definition: `esp32-s3-devkitc-1`, with N16R8 overrides in
+  `platformio.ini` and `sdkconfig.defaults`
 - Flash mode/frequency: QIO at 80 MHz
 - PSRAM mode/frequency: Octal at 80 MHz
 - Serial monitor: 115200 baud
+- Radio family: **E32 LoRa**; exact model and configuration unresolved
 - License: MIT
 
-The custom 16 MiB flash layout in `partitions.csv` is:
+The PlatformIO platform package is not currently pinned to an exact version.
+Record the installed PlatformIO, Espressif platform, ESP-IDF, and toolchain
+versions when building. Pinning/upgrading them is a later explicit
+reproducibility decision, not part of an unrelated exercise.
 
-| Partition | Size | Purpose |
+The custom 16 MiB flash layout is:
+
+| Partition | Size | Current purpose |
 | --- | ---: | --- |
-| `nvs` | 64 KiB | Small persistent key-value settings |
+| `nvs` | 64 KiB | Reserved for small persistent settings |
 | `otadata` | 8 KiB | OTA boot-slot selection metadata |
 | `ota_0` | 4 MiB | First firmware image |
 | `ota_1` | 4 MiB | Second firmware image |
-| `storage` | 7.625 MiB | FATFS files through wear levelling |
+| `storage` | 7.625 MiB | Reserved FATFS storage through wear levelling |
 | `coredump` | 256 KiB | Crash diagnostics retained across reboot |
 
-The layout makes the firmware OTA-ready, but OTA download and rollback behavior
-have not been implemented. NVS and FATFS are reserved but are not yet initialized
-or used by application code.
+The layout is OTA-ready, but OTA download, signature validation, rollback, NVS,
+FATFS, and core-dump reporting are not implemented.
 
 ## Source-of-truth rules
 
-When documents disagree, use this order:
+When sources disagree, use this order:
 
-1. Safety requirements and accepted decisions in this file
-2. The checked-in build configuration and tests
-3. The product intent and learning sequence in the daily guide
-4. Code snippets and hardware examples in the daily guide
+1. Safety invariants and explicitly accepted decisions in this file
+2. Checked-in source, build configuration, and tests for current implemented
+   behavior
+3. The learning guide for sequence, experiments, and acceptance gates
+4. `LEARNING_LOG.md` for actual observations and measurements
+5. `RadioRemoteController` for behavioral inspiration
+6. The reference project's wiring guide and schematic
 
-The daily guide was originally written for ESP32-WROOM-32 and Arduino. This
-repository uses ESP32-S3-N16R8 and ESP-IDF. Therefore:
+The lower two items never override this repository's hardware or safety
+decisions.
 
-- Port concepts to native ESP-IDF APIs; do not add Arduino compatibility merely
-  to copy a guide example.
-- Do not copy the guide's `esp32dev`, pioarduino, `setup()`/`loop()`,
-  `Preferences`, `Serial2`, Wi-Fi, ADC, GPIO, or deep-sleep calls unchanged.
-- Do not copy its GPIO table. ESP32-S3 pin capabilities differ, and the N16R8
-  module's Octal PSRAM reserves module pins that older ESP32 examples may use.
-- Verify every GPIO against the exact development/carrier-board schematic and
-  the ESP32-S3-WROOM-1 datasheet before implementing a driver or suggesting
-  wiring.
-- Recalculate radio airtime, retry timeout, duty-cycle limits, ADC scaling, and
-  battery thresholds from the chosen hardware and regional radio rules.
+Known reference contradictions include:
+
+- sketch/Markdown CE and valve pins differ from the schematic;
+- the wiring guide uses a TIP142 Darlington while the schematic uses an
+  IRLZ44N MOSFET;
+- the reference reports an energized output but calls it actual valve state;
+- link loss closes the reference output but an OPEN heartbeat may automatically
+  reopen it after reconnection;
+- the reference initializes its radio before forcing the valve output OFF;
+- the reference README says real hardware validation is still pending.
+
+Preserve the useful behavior while explicitly hardening these weaknesses.
+
+## Hardware decision gates
+
+Do not invent or copy unresolved hardware facts. Before implementing or
+suggesting wiring, confirm:
+
+- exact development/carrier board and schematic;
+- ESP32 module and board pin mapping, including strapping, USB/JTAG, serial,
+  flash, and PSRAM constraints;
+- exact E32 SKU, manufacturer datasheet/manual revision, band, supply, logic
+  levels, peak current, UART settings, AUX/mode timing, antenna, and regional
+  rules;
+- exact valve type, voltage, current, default mechanical state, duty/thermal
+  limits, and plumbing behavior;
+- driver topology, transistor conduction at the actual 3.3 V control level,
+  gate/base network, flyback protection, fuse/current limiting, power supply,
+  decoupling, grounding/isolation, connectors, and enclosure.
+
+An ESP32-S3 GPIO is a logic signal. It must never source valve current or see the
+24 V valve supply.
+
+Never transmit from an E32 without the correct antenna attached. Do not change
+radio configuration or transmit power until the exact module and applicable
+regional constraints are documented.
 
 ## Architecture
 
-Keep hardware access at the edges and domain logic independent of ESP-IDF where
-practical. Pure protocol, validation, conversion, and watering-policy code
-should be testable on the host without an ESP32.
+Keep hardware access at the edges and domain rules independent of ESP-IDF where
+practical. Introduce a boundary only when the active learning stage needs it.
+Do not scaffold the final architecture up front.
 
-Use modern C++ with clear ownership and deterministic lifetimes for new
-application code. Prefer value types, RAII, const-correctness, fixed-width
-integers, bounded buffers, and explicit error handling. Avoid exceptions,
-dynamic allocation in steady-state control paths, global mutable state, and
-unbounded blocking. Use C only where a direct ESP-IDF C boundary makes it
-simpler. Convert the application entry point to `main.cpp` when C++ application
-work begins.
+Target logical boundaries:
 
-Target component boundaries:
+- **input** — GPIO sampling plus pure button-debounce/arming behavior; emits
+  typed press/release events
+- **protocol** — explicit byte encoding/decoding, framing, validation, CRC,
+  session/sequence logic, ACK matching, duplicate/stale handling, and counters;
+  no GPIO or UART calls
+- **radio** — exclusive ownership of E32 UART and mode/AUX signals; bounded
+  transport and recovery; no valve decisions
+- **valve_policy** — pure safety state machine for desired state, applied state,
+  maximum-open deadline, link loss, lockouts, and deliberate recovery
+- **valve_driver** — minimal reviewed adapter that applies safe OFF or requested
+  ON to one GPIO; contains no radio policy
+- **diagnostics** — reset reason, firmware/protocol version, link freshness,
+  safety state/trips, and bounded health counters
+- **controller app** — composition root for input, desired intent, heartbeat,
+  status feedback, link indication, and radio
+- **valve app** — composition root that forces safe OFF first, then connects
+  validated messages to the safety policy and driver
 
-- **protocol** — versioned wire messages, serialization, CRC, sequence numbers,
-  duplicate detection, ACK/retry policy, and link statistics; no hardware calls
-- **radio** — E32 UART/GPIO ownership and transport; depends on protocol
-- **settings** — validated configuration persisted in NVS, including schema
-  version and migration/default behavior
-- **soil** — powered sampling, filtering, calibration, and conversion to a
-  bounded moisture percentage
-- **power** — battery measurement and deep-sleep policy
-- **watering** — valve control and pure safety/decision policy
-- **storage** — FATFS mounting and bounded diagnostic/log retention
-- **diagnostics** — reset reason, core-dump awareness, health counters, and
-  telemetry
-- **field-node app** — composition root and wake-cycle state machine
-- **base-station app** — composition root, LoRa/MQTT coordination, and pending
-  command management
+The controller and valve applications are separate logical composition roots.
+Whether PlatformIO builds them as separate environments, separate projects, or
+another compile-time layout is unresolved until the second role is introduced.
 
-Do not create all components up front. Introduce a boundary when a roadmap step
-needs it, and keep its public API minimal.
+Prefer one owner for each physical peripheral. Start with one non-blocking event
+loop when it meets measured timing. Add FreeRTOS tasks/queues only for a concrete
+ownership or blocking requirement; having two CPU cores is not sufficient
+reason. Use a mutex only when single ownership is genuinely impossible.
 
-### Field-node flow
-
-The target wake cycle is:
-
-1. Force the valve to its safe OFF state before other initialization.
-2. Initialize required services and load validated settings.
-3. Power and sample the soil sensor; measure battery voltage.
-4. Decide locally whether watering is allowed and necessary.
-5. Execute a bounded watering operation when required.
-6. Send telemetry through the reliable LoRa protocol.
-7. Keep a short receive window for a pending command from the base.
-8. Put the E32 into sleep mode and enter ESP32 deep sleep.
-
-State that must survive deep sleep, such as message sequence numbers and the last
-executed command, belongs in RTC memory when appropriate. Configuration that
-must survive power loss belongs in NVS. Logs or larger records belong in FATFS.
-
-### Base-station flow
-
-The base station runs continuously and has two independent responsibilities:
-
-- A radio task exclusively owns the E32 interface, validates packets, sends
-  acknowledgements, and delivers eligible pending commands while a node is
-  awake.
-- A network task owns Wi-Fi and MQTT, publishes telemetry, accepts commands, and
-  handles reconnect and resubscription.
-
-The tasks communicate through typed FreeRTOS queues. Telemetry may use a
-documented drop-old/drop-new policy because stale readings lose value. Commands
-must never disappear silently: enqueue failure, expiry, delivery, and rejection
-must be observable.
-
-Prefer one task as the sole owner of each physical peripheral. Add a mutex only
-when single ownership is genuinely impossible.
+Use modern C++ with clear ownership and deterministic lifetimes. Prefer value
+types, `enum class`, fixed-width integers, bounded buffers, const-correctness,
+explicit errors, and injected clocks for testable timing. Avoid exceptions,
+unbounded blocking, dynamic allocation in steady-state control paths, global
+mutable state, boolean state soup, and hidden hardware side effects.
 
 ## Safety invariants
 
-Code that controls water is safety-critical for this project. Preserve these
-invariants through every refactor:
+Code controlling water is safety-critical. Preserve these invariants through
+every implementation and refactor:
 
-- The valve output is forced OFF as the first hardware action after every boot,
-  reset, or wake.
-- The external valve circuit must provide a gate pull-down and flyback
-  protection; firmware is not the only safety layer.
-- Every watering operation has a hard maximum duration. The guide currently
-  proposes 600 seconds; changing it requires an explicit decision and tests.
-- Low or invalid battery readings prevent watering rather than permitting it.
-- Invalid, uncalibrated, or implausible soil readings must not trigger
-  uncontrolled watering.
-- Commands express an idempotent action such as “water for N seconds.” Never
-  implement a remote “toggle valve” command.
-- The base rejects expired commands because it has wall-clock time. The sleeping
-  node rejects duplicate sequence numbers because it may not know real time.
-- Loss of LoRa, Wi-Fi, MQTT, or the base station cannot leave the valve open.
-- Error paths and watchdog recovery must converge to valve OFF.
-- Never transmit from an E32 module without the correct antenna attached.
-- Never assume the 12 V valve supply is safe for an ESP32 pin. The power stages
-  share ground only where the reviewed circuit requires it.
+- A hardware pull-down or equivalent keeps the driver OFF before firmware runs.
+- The valve firmware's first hardware action forces the driver OFF. Do not log,
+  initialize the radio, allocate services, or touch unrelated peripherals
+  first.
+- Global/static constructors must not energize or configure the valve output.
+- Only the valve driver owns the physical output. All shutdown paths converge
+  through its OFF operation.
+- Boot/reset begins CLOSED and unarmed. A held button, stale OPEN heartbeat, or
+  pre-reset intent cannot act as a fresh OPEN edge.
+- Commands express OPEN or CLOSED intent. A remote toggle is forbidden.
+- The maximum-open timer arms only on a real OFF-to-ON transition. Repeated OPEN
+  commands and heartbeats never refresh it.
+- Low-level radio recovery cannot bypass valve policy or change applied state.
+- Sustained link loss while ON transitions to an OFF lockout.
+- Malformed, unknown, out-of-range, stale, replayed, or unauthenticated input
+  cannot open the valve or refresh command eligibility.
+- After a fail-closed trip, remain OFF until a valid CLOSED intent is observed
+  and a later fresh OPEN edge is accepted.
+- A valid status message distinguishes desired state, applied electrical output,
+  and safety state.
+- Without a position/current/pressure/flow sensor, never claim the valve
+  physically moved or water flowed.
+- External valve circuitry provides a deterministic OFF bias, flyback
+  protection, appropriate current limiting/fusing, and reviewed voltage/current
+  margins. Firmware is not the only safety layer.
+- Power loss, controller loss, E32 loss, protocol mismatch, watchdog reset,
+  brownout, and error paths cannot leave the driver ON.
+- Do not connect water or permit unattended operation until the electrical,
+  protocol, safety, range, and soak gates have recorded results.
 
-Prefer a latching valve for the eventual battery installation. A conventional
-solenoid is acceptable for learning and bench testing if its current and thermal
-limits are respected.
+A conventional normally closed solenoid matches the initial fail-off model. A
+latching valve needs a different two-pulse driver and state/recovery model; do
+not substitute it without an explicit architecture and safety decision.
 
 ## Radio protocol requirements
 
-The E32 link must explicitly handle all three expected failure modes:
+E32 transport must explicitly handle corruption, loss, duplication,
+delay/reordering, sustained silence, and unauthorized commands.
 
 | Failure | Detection | Response |
 | --- | --- | --- |
-| Corruption | CRC | Reject the packet |
-| Loss | ACK timeout | Retry with a bounded attempt count |
-| Duplication | Sequence number | Ignore an already executed command |
+| Corruption | Framing/range checks and CRC | Reject |
+| Loss | Matching ACK deadline | Bounded retry with calculated backoff/jitter |
+| Duplication | Peer/session/sequence | Do not re-execute; ACK if appropriate |
+| Delay/reordering | Session and freshness/sequence window | Reject stale intent |
+| Silence | Link-freshness deadline | Fail closed if ON; bounded radio recovery |
+| Unauthorized command | Authentication and replay policy | Reject and count |
 
 Protocol code must:
 
-- Use an explicit, versioned wire format; never transmit an ABI-dependent C++
-  object accidentally.
-- Define byte order, field widths, maximum payload, framing, and CRC coverage.
-- Validate magic/version/type/length/ranges before acting on a packet.
-- Match acknowledgements to sender and sequence number.
-- Use bounded retry backoff with random jitter to avoid repeated collisions.
-- Keep success, retry, rejection, CRC-failure, and final-failure counters.
-- Treat a wire-format change as a compatibility change requiring a protocol
-  version decision and updated tests.
+- use explicit serialization; never transmit an ABI-dependent C++ object or
+  packed struct as the accidental wire format;
+- define framing, byte order, field widths, length bounds, identities, protocol
+  version, session/boot epoch, sequence behavior, CRC coverage, and status
+  semantics;
+- validate enough framing to bound reads, then validate
+  magic/version/identity/type/length/CRC/authentication/ranges/freshness before
+  acting;
+- separate immediate intent edges from desired-state heartbeats;
+- match ACK/status to peer, session, and sequence;
+- ensure repeated OPEN never extends the continuous-open limit;
+- ensure an old OPEN heartbeat cannot clear a lockout;
+- use bounded retry/backoff with jitter based on measured UART/radio latency and
+  airtime;
+- expose success, retry, duplicate, stale, CRC, validation, authentication,
+  reinit, safety-trip, and final-failure counters;
+- treat a wire-format change as a compatibility/version decision with updated
+  golden-vector and behavior tests;
+- distinguish CRC from authentication: CRC detects accidental corruption, not a
+  valid-looking command from another transmitter;
+- define a threat model, pairing, key provisioning/storage/replacement, message
+  authentication, and replay protection before real-valve deployment.
 
-The 24-byte packed packet in the guide is a starting concept, not yet an accepted
-wire contract. Review its serialization and framing before adopting it.
+The exact wire format and cryptographic primitive are unresolved. Do not select
+them merely to make a documentation example concrete.
 
-## Persistence and observability
+## Persistence, security, and observability
 
-- Initialize NVS using the standard ESP-IDF recovery path for exhausted or
-  incompatible NVS pages. Do not erase settings for unrelated errors.
-- Store a configuration schema version and validate every loaded value. Fall
-  back to safe defaults when data is missing or invalid.
-- Mount the `storage` partition using ESP-IDF FATFS plus wear levelling. Define
-  retention and full-filesystem behavior before writing recurring logs.
-- Never store secrets, credentials, or private keys in Git. Use a documented
-  local configuration mechanism and provide non-secret examples.
-- Log reset reason, wake cause, firmware version, free/internal memory, PSRAM
-  status, and critical subsystem failures.
-- Diagnostics must remain useful without serial access: important health and
-  link statistics eventually belong in telemetry.
-- Check every ESP-IDF return value. Expected failures should have an explicit
-  recovery or safe-degradation policy.
+- Do not add persistence until a current requirement needs it.
+- When NVS is introduced, initialize it with the ESP-IDF recovery path only for
+  exhausted/incompatible NVS pages. Do not erase settings for unrelated errors.
+- Store a schema version and validate every persisted value. Missing or invalid
+  safety settings fall back to safe behavior.
+- Define credential provisioning before storing radio authentication keys.
+  Never commit secrets, production keys, credentials, or private material.
+- Secure boot, flash encryption, NVS encryption, and eFuse changes require an
+  explicit threat model, provisioning/recovery plan, and user approval. Some
+  actions are irreversible.
+- OTA needs signed-image policy, transport, validation, rollback, and recovery;
+  the existing partitions alone do not implement OTA.
+- Mount FATFS only after defining retention, full-filesystem behavior, and
+  bounded write frequency.
+- Diagnostics should eventually include role, firmware/protocol version, reset
+  reason, uptime, peer/session identity, applied output, safety state, link age,
+  safety trips, and protocol/radio counters.
+- Logs must be bounded and useful without hiding time-critical behavior.
 
-## Development workflow
+## Development and teaching workflow
 
-The owner is learning ESP32 development. Work in small, reviewable steps:
+Follow the active stage in the learning guide:
 
-1. Explain the next decision in plain language and why it matters.
-2. Ask before making a choice with meaningful hardware, safety, persistence,
-   protocol, or architectural consequences.
-3. Implement only the agreed step.
-4. Build and run the smallest relevant automated checks.
-5. State what was verified, what still requires hardware, and what comes next.
+1. Explain the next concept and why the experiment exists.
+2. Ask the owner to predict the result.
+3. Resolve any hardware, safety, protocol, persistence, security, or
+   architecture decision that affects the step.
+4. Read the current code and implement only the agreed experiment.
+5. Build and run the smallest relevant automated checks.
+6. Provide the exact bench procedure and expected observation for hardware
+   work.
+7. Compare prediction with observation and explain the difference.
+8. Record measured results in `LEARNING_LOG.md`.
+9. State what was verified, what remains simulated, and the next gate.
 
-Do not silently fill in unresolved hardware details. Prefer one focused question
-at a time. Preserve the guide's learning method: predict behavior first, observe
-the result, and explain any difference.
+Prefer one focused question at a time. Do not silently choose hardware or safety
+details. Do not jump ahead by creating all components, a complete radio stack,
+or real-valve code during an earlier lesson.
 
-Learning exercises must be extensively commented. Explain unfamiliar C++ syntax,
-ESP-IDF and FreeRTOS calls, execution flow, wiring assumptions, and expected
-hardware behavior so the source can be read as learning material. Keep the
-executable logic simple and make each comment teach purpose or reasoning.
-Avoid nested function calls in learning exercises. Store intermediate values and
-return codes in descriptively named variables so each operation and its error
-check can be read separately.
+Learning code must be readable as teaching material:
 
-Comments must explain **why** a constraint, workaround, or non-obvious decision
-exists. Do not add comments that merely restate the code. Use the established
-`Why:` style in configuration files where it improves clarity.
-
-Keep `LEARNING_LOG.md` when practical, recording observed values rather than
-assumptions: ADC measurements, calibration endpoints, stack high-water marks,
-radio airtime, retry counts, current consumption, and failure-test results.
+- explain unfamiliar C++ syntax, ESP-IDF/FreeRTOS calls, execution flow, wiring
+  assumptions, and expected hardware behavior;
+- explain why a constraint or workaround exists, not what an obvious statement
+  does;
+- store intermediate values and `esp_err_t` results on descriptive lines before
+  checking them;
+- avoid dense nested calls, clever templates, premature abstractions, and
+  unrelated refactors;
+- keep pure policy tests concise and behavior-focused;
+- remove obsolete teaching scaffolding when the learner no longer needs it and
+  the cleanup is an agreed step.
 
 ## Build and verification
 
-Primary build:
+Primary current build:
 
 ```sh
 pio run
@@ -264,34 +336,62 @@ pio run
 
 Before considering a change complete:
 
-- Build every affected firmware environment.
-- Run host tests for hardware-independent logic when present.
-- Add tests for protocol serialization/validation and safety policy before
-  relying on those parts on hardware.
-- Treat warnings as defects unless a documented toolchain issue requires a
-  narrowly scoped suppression.
-- For hardware changes, provide a concrete bench test and expected observation.
-- For valve/power work, include a safe failure test and do not claim verification
-  without physical measurement.
-- Do not upload firmware, erase flash, change radio configuration, energize the
-  valve, or push Git changes unless the user explicitly authorizes that action.
+- build every affected firmware environment;
+- run host tests for pure protocol, timing, debounce, and valve-policy logic
+  when present;
+- run the narrowest relevant checks first, then broader checks when risk
+  warrants;
+- treat warnings as defects unless a documented toolchain issue requires a
+  narrow suppression;
+- search usages/callers/configuration/tests of changed code and assess behavior
+  impacts;
+- inspect touched ranges for clarity, duplication, unnecessary abstraction,
+  mixed command/query behavior, and excessive coupling;
+- provide concrete bench steps and expected observations for hardware changes;
+- include a safe failure test for any output/valve/power change;
+- distinguish build success, simulated behavior, bench measurements, and
+  installed-system verification;
+- never claim a build, test, measurement, range, security property, or hardware
+  behavior that was not actually verified.
+
+Do not upload firmware, erase flash, change radio configuration, transmit,
+enable irreversible security/eFuse settings, energize the valve, connect water,
+or push Git changes unless the user explicitly authorizes that action.
+
+Documentation-only changes do not require a firmware build when no build input
+changed. Verify their links, current-state claims, terminology, safety
+traceability, and Markdown structure instead.
+
+## Documentation synchronization
+
+- `AGENTS.md` owns product invariants, accepted decisions, and contributor
+  behavior.
+- The learning guide owns stage order, experiments, evidence, and gates.
+- `LEARNING_LOG.md` owns observations and measurements; do not copy assumptions
+  there as results.
+- `README.md` stays a concise orientation and links to the detailed sources.
+- Checked-in code/config/tests remain authoritative for what is implemented.
+- When an unresolved hardware or protocol decision becomes accepted, update
+  this file, the relevant guide section, tests, and decision/measurement log in
+  the same change.
+- When behavior deliberately differs from `RadioRemoteController`, document the
+  difference and safety rationale rather than editing the external reference.
 
 ## Unresolved decisions
 
-Resolve these incrementally; do not guess:
+- Exact development/carrier board and schematic
+- Final GPIO assignment
+- E32 model, band, radio settings, UART mode, supply, antenna, and regional rules
+- Final application/source/PlatformIO layout for controller and valve roles
+- Button wiring/protection for its real cable and installation
+- Valve type and reviewed driver/power circuit
+- Heartbeat, link-loss, maximum-open, retry, and radio-reinit timing
+- Wire format, framing, session/sequence rules, and compatibility policy
+- Threat model, authentication, pairing, and key provisioning/storage
+- Indicator hardware and how it represents stale/unknown state
+- Persistent settings and schema
+- Logging/retention policy
+- OTA/security/rollback policy
+- Enclosure, environmental, wiring, and deployment requirements
 
-- Exact development/carrier board and its schematic (the module is confirmed as
-  ESP32-S3-WROOM-1-N16R8)
-- Final GPIO assignment for E32, soil sensor, battery ADC, and valve driver
-- E32 model, frequency band, transmit power, UART mode pins, and regional rules
-- Soil-sensor electrical characteristics and measured wet/dry calibration
-- Battery chemistry, voltage-divider ratio, low-voltage threshold, and power
-  switching
-- Conventional versus latching valve and the corresponding driver circuit
-- MQTT broker, authentication/TLS, topic contract, and credential provisioning
-- Exact protocol wire format
-- Logging/retention policy for the FATFS partition
-- OTA transport, signature/security policy, validation, and rollback behavior
-
-When one of these becomes known, update this file and the relevant tests or
-documentation in the same change.
+Resolve these incrementally at the learning stage that needs them. Do not guess.

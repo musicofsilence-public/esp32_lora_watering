@@ -1,25 +1,36 @@
-# ESP32 LoRa Watering
+# ESP32 LoRa Remote Valve Controller
 
-An ESP-IDF learning project that grows into a remote watering system using
-ESP32-S3 boards and E32 LoRa radios.
+A learning project that grows from small ESP32-S3 experiments into a
+production-quality, two-device remote control for a 24 V water valve.
 
-## Target hardware
+## Product target
+
+- The **controller unit** reads a momentary wall button: hold requests OPEN,
+  release requests CLOSED.
+- The **valve unit** receives intent through E32 LoRa, applies a fail-closed
+  safety policy, controls a reviewed external driver, and reports its applied
+  electrical output and safety state.
+- Explicit state, heartbeats, acknowledgements, retries, lockouts, and
+  diagnostics make failures observable and bounded.
+
+This is inspired by `C:\Users\Public\Arduino\RadioRemoteController`, but it is an
+ESP32-S3/ESP-IDF redesign rather than an Arduino/nRF24 port.
+
+## Current status
+
+The controller and valve firmware are not implemented yet. `src/main.cpp` is the
+first ESP-IDF learning exercise: blinking an external LED. No button, E32 link,
+valve driver, or real valve behavior has been validated by this repository.
+
+## Confirmed platform
 
 - ESP32-S3-WROOM-1-N16R8
-  - 16 MB Quad-SPI flash
-  - 8 MB Octal-SPI PSRAM
-- E32 LoRa radio modules
-- Capacitive soil-moisture sensor
-- Logic-level MOSFET driver and 12 V solenoid valve
-
-## Development environment
-
-- [PlatformIO](https://platformio.org/)
-- [ESP-IDF](https://github.com/espressif/esp-idf)
-- PlatformIO board: `esp32-s3-devkitc-1`
-
-The project configuration enables the N16R8 module's 16 MB flash and 8 MB
-PSRAM. The persistent ESP-IDF settings are stored in `sdkconfig.defaults`.
+- 16 MiB Quad-SPI flash and 8 MiB Octal-SPI PSRAM
+- ESP-IDF with modern C++
+- PlatformIO using the current `esp32-s3-devkitc-1` definition and explicit
+  N16R8 configuration
+- E32 LoRa radio family; exact model and settings remain unresolved
+- Serial monitor at 115200 baud
 
 ## Build
 
@@ -27,16 +38,23 @@ PSRAM. The persistent ESP-IDF settings are stored in `sdkconfig.defaults`.
 pio run
 ```
 
-Upload and open the serial monitor:
+Building does not flash the board. Uploading, transmitting, changing radio
+configuration, or energizing a valve requires a separate intentional hardware
+step.
 
-```sh
-pio run --target upload
-pio device monitor
-```
+## Learn and contribute
 
-## Learning guide
+- [Learning guide](docs/esp32-lora-remote-controller-learning-guide.md)
+- [Learning and measurement log](LEARNING_LOG.md)
+- [Contributor and safety rules](AGENTS.md)
 
-See the [daily ESP32 and LoRa watering guide](docs/esp32-lora-watering-daily-guide.md).
+## Safety
+
+The ESP32 must never drive a 24 V valve directly. The final system requires a
+reviewed driver, deterministic hardware OFF bias, flyback protection,
+appropriate power protection, an attached radio antenna, and recorded bench
+tests. Reported output state does not prove mechanical valve position or water
+flow without a sensor.
 
 ## License
 
