@@ -32,7 +32,7 @@ has been verified with PlatformIO.
 
 Accepted technical decisions:
 
-- Module: **ESP32-S3-WROOM-1-N16R8**
+- Confirmed module: **ESP32-S3-WROOM-1-N16R8**
   - 16 MiB Quad-SPI flash
   - 8 MiB Octal-SPI PSRAM
 - Framework: **ESP-IDF**, not Arduino
@@ -238,6 +238,14 @@ Do not silently fill in unresolved hardware details. Prefer one focused question
 at a time. Preserve the guide's learning method: predict behavior first, observe
 the result, and explain any difference.
 
+Learning exercises must be extensively commented. Explain unfamiliar C++ syntax,
+ESP-IDF and FreeRTOS calls, execution flow, wiring assumptions, and expected
+hardware behavior so the source can be read as learning material. Keep the
+executable logic simple and make each comment teach purpose or reasoning.
+Avoid nested function calls in learning exercises. Store intermediate values and
+return codes in descriptively named variables so each operation and its error
+check can be read separately.
+
 Comments must explain **why** a constraint, workaround, or non-obvious decision
 exists. Do not add comments that merely restate the code. Use the established
 `Why:` style in configuration files where it improves clarity.
@@ -272,7 +280,8 @@ Before considering a change complete:
 
 Resolve these incrementally; do not guess:
 
-- Exact ESP32-S3 development/carrier board and its schematic
+- Exact development/carrier board and its schematic (the module is confirmed as
+  ESP32-S3-WROOM-1-N16R8)
 - Final GPIO assignment for E32, soil sensor, battery ADC, and valve driver
 - E32 model, frequency band, transmit power, UART mode pins, and regional rules
 - Soil-sensor electrical characteristics and measured wet/dry calibration
