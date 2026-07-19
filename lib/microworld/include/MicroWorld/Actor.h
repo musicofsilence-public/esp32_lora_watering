@@ -12,7 +12,15 @@ class FWorldBase;
 template<std::size_t MaxActors>
 class TWorld;
 
-/** Supplies common lifecycle and owner state for fixed-capacity Actor templates. */
+/**
+ * Supplies the non-managed Core Actor model for fixed-capacity applications.
+ *
+ * Choose FActorBase and TActor when the consumer owns pointer-stable Actor and
+ * Component lifetimes and needs only bounded lifecycle and tick dispatch. This
+ * layer deliberately avoids UObject identity, FObjectStore, and garbage
+ * collection; applications that need managed identity and traced child
+ * references use AActor from <MicroWorld/Engine/Actor.h> instead.
+ */
 class FActorBase : public FTickable
 {
 public:

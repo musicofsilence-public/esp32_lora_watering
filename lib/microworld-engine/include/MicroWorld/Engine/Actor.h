@@ -18,12 +18,16 @@ class UActorComponent;
 class UWorld;
 
 /**
- * The smallest managed actor anchored on UObject and Core's tick mix-in.
+ * Provides the smallest managed Actor for Object and Engine applications that
+ * need generation-checked identity, traced Component references, and a weak
+ * World parent.
  *
- * The application creates one AActor (or a user-derived class) inside an
- * FObjectStore, registers zero or more UActorComponent instances before
- * BeginPlay, then registers the actor with exactly one UWorld. AActor holds
- * traced references to its components and a weak reference to its owning world.
+ * The application creates AActor inside an FObjectStore, registers its
+ * UActorComponent instances before BeginPlay, and attaches it to one UWorld;
+ * the Actor traces its Components without making its weak World parent owning.
+ * Applications that own pointer-stable objects themselves and need only
+ * fixed-capacity lifecycle and tick dispatch use FActorBase and TActor from
+ * <MicroWorld/Actor.h> instead.
  */
 class AActor : public UObject, private FTickable
 {
