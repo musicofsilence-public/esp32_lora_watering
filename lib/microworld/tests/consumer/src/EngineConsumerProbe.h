@@ -2,10 +2,12 @@
 
 #include "ObjectConsumerProbe.h"
 
+#include <MicroWorld/Delegates/Delegate.h>
 #include <MicroWorld/Engine/Actor.h>
 #include <MicroWorld/Engine/ActorComponent.h>
 #include <MicroWorld/Engine/EngineClassIds.h>
 #include <MicroWorld/Engine/EngineStorage.h>
+#include <MicroWorld/Engine/Timer.h>
 #include <MicroWorld/Engine/World.h>
 #include <MicroWorld/Object/GarbageCollector.h>
 #include <MicroWorld/Object/ObjectStore.h>
@@ -47,6 +49,11 @@ enum class EEngineConsumerExitCode : int
 	EndPlayFailed = 12,
 	RootedCollectionFailed = 13,
 	UnrootedCollectionFailed = 14,
+	TimerScheduleFailed = 15,
+	TimerAdvanceFailed = 16,
+	TimerDidNotFireOnce = 17,
+	TimerFiredAfterCompletion = 18,
+	TimerStaleCancelFailed = 19,
 	ObjectProfileFailureOffset = 100,
 };
 
@@ -182,7 +189,51 @@ inline int RunEngineConsumerProbe() noexcept
 	WorldRoot.Pointer.Reset();
 	const FGarbageCollectionResult UnrootedCollection = Collector.CollectFull();
 	const FObjectStoreStats FinalStats = Store.Stats();
-	return UnrootedCollection.Result == ERuntimeResult::Success && UnrootedCollection.ObjectsReclaimed == 3 && FinalStats.OccupiedSlots == 0
-		? static_cast<int>(EEngineConsumerExitCode::Success)
-		: static_cast<int>(EEngineConsumerExitCode::UnrootedCollectionFailed);
+	const bool bUnrootedCollectionSucceeded =
+		UnrootedCollection.Result == ERuntimeResult::Success && UnrootedCollection.ObjectsReclaimed == 3 && FinalStats.OccupiedSlots == 0;
+	if (!bUnrootedCollectionSucceeded)
+	{
+		return static_cast<int>(EEngineConsumerExitCode::UnrootedCollectionFailed);
+	}
+
+	// Exercises the bounded timer facility the same way a host application would: the caller owns the
+	// manager value, supplies every clock reading, and the bound inline callback observes its dispatch.
+	constexpr TimePointMilliseconds TimerInitialNow = 1000;
+	constexpr DurationMilliseconds TimerDuration = 100;
+	TTimerManager<4, 32> TimerManager{TimerInitialNow};
+	std::uint32_t TimerFireCount{0};
+	TDelegate<void(), 32> TimerCallback;
+	(void)TimerCallback.Bind([&TimerFireCount]() noexcept { ++TimerFireCount; });
+
+	FTimerHandle TimerHandle{};
+	const ETimerResult TimerScheduleResult = TimerManager.Schedule(std::move(TimerCallback), TimerDuration, ETimerMode::OneShot, TimerHandle);
+	if (TimerScheduleResult != ETimerResult::Success || !TimerHandle.IsValid())
+	{
+		return static_cast<int>(EEngineConsumerExitCode::TimerScheduleFailed);
+	}
+
+	const ETimerResult AdvanceAtDeadlineResult = TimerManager.Advance(TimerInitialNow);
+	const ETimerResult AdvancePastDeadlineResult = TimerManager.Advance(TimerInitialNow + TimerDuration);
+	if (AdvanceAtDeadlineResult != ETimerResult::Success || AdvancePastDeadlineResult != ETimerResult::Success)
+	{
+		return static_cast<int>(EEngineConsumerExitCode::TimerAdvanceFailed);
+	}
+	if (TimerFireCount != 1u)
+	{
+		return static_cast<int>(EEngineConsumerExitCode::TimerDidNotFireOnce);
+	}
+
+	const ETimerResult AdvanceAfterCompletionResult = TimerManager.Advance(TimerInitialNow + TimerDuration + TimerDuration);
+	if (AdvanceAfterCompletionResult != ETimerResult::Success || TimerFireCount != 1u)
+	{
+		return static_cast<int>(EEngineConsumerExitCode::TimerFiredAfterCompletion);
+	}
+
+	const ETimerResult StaleCancelResult = TimerManager.Cancel(TimerHandle);
+	if (StaleCancelResult != ETimerResult::StaleHandle)
+	{
+		return static_cast<int>(EEngineConsumerExitCode::TimerStaleCancelFailed);
+	}
+
+	return static_cast<int>(EEngineConsumerExitCode::Success);
 }

@@ -3,8 +3,9 @@
 ## Unreleased
 
 Memory, Object, and the minimal managed Engine are implemented adjacent
-candidates. The next milestone is simple fixed-capacity Engine timers. Live
-state and exact evidence are recorded in [PROGRESS.md](PROGRESS.md).
+candidates. The bounded `TTimerManager` fixed-capacity timer facility is now an
+Engine candidate. The next milestone is Simple Net. Live state and exact
+evidence are recorded in [PROGRESS.md](PROGRESS.md).
 
 ## 0.1.0 - 2026-07-18
 

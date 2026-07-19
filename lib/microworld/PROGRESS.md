@@ -13,8 +13,8 @@ passed its acceptance checks; target runtime margins remain unmeasured.
 | Core | Released 0.1 lifecycle and tick package |
 | Memory | Implemented candidate; target runtime margins unmeasured |
 | Object / GC | Implemented candidate; target runtime margins unmeasured |
-| Engine | Implemented candidate; target runtime margins unmeasured |
-| Net | Later, after simple Engine timers |
+| Engine (incl. bounded timers) | Implemented candidate; target runtime margins unmeasured |
+| Net | Next milestone |
 
 ## Visual roadmap
 
@@ -35,16 +35,20 @@ or inspect the
 - Engine: managed `UWorld`, `AActor`, and `UActorComponent`; fixed registration
   before play; deterministic lifecycle and tick order; traced downward
   ownership and weak parent links; explicit registration failures.
+- Engine timers: bounded `TTimerManager<MaxTimers, InlineCallbackBytes>` with
+  caller-supplied time, generation-checked handles, one-shot and looping
+  scheduling, deterministic insertion-order dispatch, cancellation, no catch-up
+  bursts, and no observable steady-state allocation.
 
 ## Next
 
-Add simple fixed-capacity Engine timers with caller-supplied time, explicit
-capacity and handle failures, deterministic callback order, cancellation, and
-no catch-up bursts.
+Add a small bounded Net package: a byte reader/writer, one non-blocking
+`INetDriver`, one fixed-capacity `FNetManager`, explicit full/invalid/
+unavailable results, and a host loopback implementation.
 
 ## Later
 
-Simple Net and one ESP32-S3 example remain later milestones.
+One ESP32-S3 example remains a later milestone.
 
 ## Evidence
 
@@ -54,8 +58,8 @@ Simple Net and one ESP32-S3 example remain later milestones.
 | Memory | 27 cases, including paired Clang 20 ASan/UBSan | Candidate evidence; target margins unmeasured |
 | Object | 26 cases under MSVC Release, strict GCC 16, and paired Clang 20 ASan/UBSan | Candidate evidence; target margins unmeasured |
 | Object ESP32 image | 20,172 bytes RAM and 198,877 bytes flash | Compile-only complete-image evidence |
-| Engine | 21 behavior cases; MSVC Release strict consumer built with exceptions and RTTI disabled and exited 0; four-package dependency check passed across 41 files | Accepted candidate evidence; target runtime margins unmeasured |
-| Engine ESP32 image | 20,332 / 327,680 bytes RAM (6.2%); 206,329 / 4,194,304 bytes flash (4.9%) | Compile-only complete-image evidence |
+| Engine | 52 behavior cases (21 lifecycle/registration/GC plus 31 timer cases); MSVC Release timer paths observed no scalar, array, or aligned global new; strict Engine consumer built with exceptions and RTTI disabled exited 0; four-package dependency check passed across 42 files | Accepted candidate evidence; target runtime margins unmeasured |
+| Engine ESP32 image | 20,332 / 327,680 bytes RAM (6.2%); 207,877 / 4,194,304 bytes flash (5.0%) | Compile-only complete-image evidence; +1,548 bytes flash from baseline |
 
 No target upload, runtime timing, stack, heap, radio, or physical-hardware
 claim has been recorded for Memory, Object, or Engine.

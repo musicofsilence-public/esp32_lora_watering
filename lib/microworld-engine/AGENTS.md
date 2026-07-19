@@ -8,10 +8,11 @@ Engine is the managed-runtime layer above Object:
 `Core <- Memory <- Object <- Engine`. It may depend only on those inward
 packages and the C++17 standard library.
 
-The package owns `UWorld`, `AActor`, and `UActorComponent`. Downward ownership
-is traced, parent observations are weak, and applications own all fixed
-registration storage and roots. Engine does not own timers, networking,
-runtime spawn/destroy, threads, platform adapters, or hardware APIs.
+The package owns `UWorld`, `AActor`, `UActorComponent`, and a bounded
+caller-time timer facility. Downward ownership is traced, parent observations
+are weak, and applications own all fixed registration storage and roots.
+Engine does not own networking, runtime spawn/destroy, threads, platform
+adapters, or hardware APIs.
 
 ## Concepts and boundaries
 
@@ -25,6 +26,10 @@ runtime spawn/destroy, threads, platform adapters, or hardware APIs.
   also owns the object store, root table, GC worklist, and World root.
 - Constructors, destruction hooks, and reference visitors must not perform
   structural object-store or collection work.
+- `TTimerManager` is a standalone value owned by the application. The
+  application supplies every clock reading and decides when Advance is called
+  relative to World dispatch. Timers hold no reference to `UWorld`, `AActor`, or
+  `UActorComponent`, and dispatch of one does not trigger the other.
 - Keep portable code bounded, allocation-free in steady state, single-pass, free
   of structural mutation during dispatch, and free of RTTI, exceptions, hidden
   clocks, threads, and SDK calls.

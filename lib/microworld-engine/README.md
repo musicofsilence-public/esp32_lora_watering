@@ -19,8 +19,12 @@ Current status and recorded evidence live in
 - `UWorld` traces Actors; `AActor` traces Components; parent links are weak and
   expire when the parent is reclaimed.
 - Caller-supplied monotonic milliseconds drive scheduling.
+- `TTimerManager<MaxTimers, InlineCallbackBytes>` schedules fixed-capacity
+  one-shot and looping timers from caller-supplied time. The application owns
+  the manager value, supplies every clock reading, and decides when Advance is
+  called relative to World dispatch.
 - Lifecycle methods return `ERuntimeResult`; registration methods return
-  `EEngineResult`.
+  `EEngineResult`; timer methods return `ETimerResult`.
 
 The application owns the object store, root table, GC worklist, caller-owned
 registration storage, and one `TStrongObjectPtr<UWorld>` root.
@@ -36,5 +40,5 @@ ctest --test-dir <build-directory> --output-on-failure
 CMake consumers link `MicroWorld::Engine`. A successful compile or host test
 does not establish target runtime margins or hardware behavior.
 
-Engine does not provide timers, networking, runtime spawn/destroy, subsystems,
+Engine does not provide networking, runtime spawn/destroy, subsystems,
 serialization, replication, platform abstraction, or hardware APIs.

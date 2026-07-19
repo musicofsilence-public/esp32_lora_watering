@@ -11,8 +11,8 @@ editor, or asset compatible with UE.
 | Primary tick | `FTickFunction` | Core | Caller supplies time; no tick groups or catch-up bursts |
 | Managed object | `UObject`, handles, roots, GC | Object candidate | Fixed caller-owned storage and explicit tracing |
 | Managed World / Actor / Component | `UWorld`, `AActor`, `UActorComponent` | Engine candidate | Application roots World; World/Actor trace children; parent references are weak |
-| Timers | Engine timers | Next | Fixed capacity and caller time |
-| Network byte I/O | `INetDriver` and `FNetManager` | Later | One non-blocking driver, fixed-capacity manager, bounded bytes, and host loopback |
+| Timers | `TTimerManager<MaxTimers, InlineCallbackBytes>` | Engine candidate | Fixed capacity, caller time, deterministic insertion-order dispatch, no catch-up bursts |
+| Network byte I/O | `INetDriver` and `FNetManager` | Next | One non-blocking driver, fixed-capacity manager, bounded bytes, and host loopback |
 
 `TObjectPtr` is a traced managed reference, `TWeakObjectPtr` observes without
 retaining, and `TStrongObjectPtr` is an explicit external root. They are not

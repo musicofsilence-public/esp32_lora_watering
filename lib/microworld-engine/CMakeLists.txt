@@ -83,9 +83,11 @@ if(MICROWORLD_ENGINE_BUILD_TESTS)
 
     set(MICROWORLD_ENGINE_TEST_SOURCES
         "${CMAKE_CURRENT_SOURCE_DIR}/../microworld/tests/TestMain.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests/EngineAllocationCounters.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/tests/EngineLifecycleTests.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/tests/EngineRegistrationTests.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/tests/EngineGarbageCollectionTests.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests/EngineTimerManagerTests.cpp"
     )
 
     if(BUILD_TESTING)

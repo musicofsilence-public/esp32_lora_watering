@@ -24,22 +24,22 @@ flowchart TB
         CORE["<b>1 · Core</b><br/><small><b>RELEASED 0.1</b><br/>Lifecycle · tick · typed results<br/>31 cases + 5 CTest checks</small>"]
         MEMORY["<b>2 · Memory</b><br/><small><b>IMPLEMENTED CANDIDATE</b><br/>Fixed storage · smart pointers<br/>containers · delegates · 27 cases</small>"]
         OBJECT["<b>3 · Object / GC</b><br/><small><b>IMPLEMENTED CANDIDATE</b><br/>UObject · handles · roots<br/>bounded incremental GC · 26 cases</small>"]
-        ENGINE["<b>4 · Minimal Engine</b><br/><small><b>ACCEPTED CANDIDATE</b><br/>UWorld · AActor · UActorComponent<br/>21 cases · ESP32 compile passed</small>"]
+        ENGINE["<b>4 · Minimal Engine</b><br/><small><b>ACCEPTED CANDIDATE</b><br/>UWorld · AActor · UActorComponent<br/>52 cases · ESP32 compile passed</small>"]
+        TIMERS["<b>5 · Simple Timers</b><br/><small><b>IMPLEMENTED CANDIDATE</b><br/>Fixed capacity · cancellation<br/>caller time · no catch-up bursts</small>"]
 
-        CORE --> MEMORY --> OBJECT --> ENGINE
+        CORE --> MEMORY --> OBJECT --> ENGINE --> TIMERS
     end
 
     subgraph DELIVERY["NEXT ·"]
         direction LR
-        TIMERS["<b>5 · Simple Timers</b><br/><small><b>NEXT</b><br/>Fixed capacity · cancellation<br/>caller time · no catch-up bursts</small>"]
-        NET["<b>6 · Simple Net</b><br/><small><b>PLANNED</b><br/>Bounded byte I/O · INetDriver<br/>FNetManager · host loopback</small>"]
+        NET["<b>6 · Simple Net</b><br/><small><b>NEXT</b><br/>Bounded byte I/O · INetDriver<br/>FNetManager · host loopback</small>"]
         EXAMPLE["<b>7 · ESP32-S3 Example</b><br/><small><b>PLANNED</b><br/>One deterministic demonstration<br/>compile first · hardware later</small>"]
 
-        TIMERS --> NET --> EXAMPLE
+        NET --> EXAMPLE
     end
 
     VISION -->|"guides every decision"| CORE
-    ENGINE -->|"next milestone"| TIMERS
+    TIMERS -->|"next milestone"| NET
 
     ACCEPT["<b>Every milestone must stay:</b><br/><small>small · bounded · explicit · testable<br/>C++17 · no hidden allocation or platform policy</small>"]
     ENGINE -. "quality boundary" .-> ACCEPT
@@ -57,9 +57,9 @@ flowchart TB
 
     class VISION vision;
     class CORE released;
-    class MEMORY,OBJECT,ENGINE candidate;
-    class TIMERS next;
-    class NET,EXAMPLE planned;
+    class MEMORY,OBJECT,ENGINE,TIMERS candidate;
+    class NET next;
+    class EXAMPLE planned;
     class ACCEPT principle;
     class LATER later;
 
