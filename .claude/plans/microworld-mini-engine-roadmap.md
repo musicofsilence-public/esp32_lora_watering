@@ -3,13 +3,13 @@
 | Field | Value |
 |---|---|
 | **Created** | 2026-07-19 |
-| **Status** | In Progress (Gate C accepted for roadmap progression; Phase 3 Object implementation underway; Memory remains experimental pending target-margin evidence) |
+| **Status** | In Progress (Gates A-C accepted for roadmap progression; Phase 3 Object implementation and technical Gate D evidence complete; owner Gate D acceptance pending; Memory remains experimental pending target-margin evidence) |
 | **Change Type** | Redesign |
 | **Author** | Codex with project owner |
 | **Target Module** | `lib/microworld` and future adjacent module/port packages |
 | **Priority** | High |
 | **Estimated Scope** | XL (multi-release, likely multiple months) |
-| **P4 CL / Branch** | Local working tree; no commit requested |
+| **P4 CL / Branch** | Git checkpoint `e1e7b75`; not pushed |
 
 ---
 
@@ -2187,3 +2187,4 @@ files before their prerequisite gate is approved.
 | 11 | 2026-07-19 | Phase 2 verification | Implemented the adjacent Memory candidate with explicit resources, fallible unique/shared ownership, fixed containers, and bounded delegates; passed 27 host cases, benchmarks, dependency/profile checks, standalone no-exceptions/no-RTTI consumption, and ESP32-S3 compile evidence; a narrow ASan lifetime regression passed, while installed Windows ASan/UBSan runtimes left full-suite sanitizer evidence environment-limited; Gate C promotion and target margin remain owner decisions |
 | 12 | 2026-07-19 | Host toolchain verification | Installed WinLibs GCC 16.1.0 through WinGet for the current user, added `mingw64/bin` to the user `PATH`, and passed the PlatformIO Native Core consumer build and runtime probe with exit code zero |
 | 13 | 2026-07-19 | Project owner | Accepted Gate C for roadmap progression after paired Clang++ 20.1.8 ASan/UBSan Memory evidence passed 27/27; Memory remains experimental pending target-margin evidence |
+| 14 | 2026-07-19 | Phase 3 verification | Completed the Object package, generational handles, descriptor registry, roots, bounded incremental GC, consumers, tests, benchmarks, and profile gates; MSVC, strict GCC, and paired Clang ASan/UBSan passed 25/25; ESP32-S3 compile/link and package/map checks passed without upload; technical Gate D evidence is complete and owner acceptance remains pending |
