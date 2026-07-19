@@ -1,6 +1,7 @@
 # MicroWorld Mini Engine Roadmap
 
-This is the active implementation order. Current status and evidence belong in
+This document defines milestone scope and acceptance checks. Current status,
+next work, and evidence belong only in
 [PROGRESS.md](../../lib/microworld/PROGRESS.md).
 
 Historical detailed planning remains available at:
@@ -9,7 +10,7 @@ Historical detailed planning remains available at:
 git show 0c4aa73:.claude/plans/microworld-mini-engine-roadmap.md
 ```
 
-## Foundation: done
+## Foundation
 
 - Core: deterministic lifecycle, tick scheduling, bounded registration, and
   explicit results.
@@ -17,12 +18,9 @@ git show 0c4aa73:.claude/plans/microworld-mini-engine-roadmap.md
   and delegates.
 - Object: managed handles, roots, descriptors, fixed store, and bounded GC.
 
-Core is released. Memory and Object remain experimental on unmeasured target
-runtime margins, but they are the foundation for the next implementation.
+## 1. Minimal Engine
 
-## 1. Minimal Engine: next
-
-Create `lib/microworld-engine` with only:
+The milestone is limited to:
 
 - `UWorld`, `AActor`, and `UActorComponent`;
 - fixed-capacity registration before `BeginPlay`;
@@ -49,7 +47,8 @@ Acceptance checks:
 
 ## 2. Simple timers
 
-Add a fixed-capacity Engine timer facility only after the minimal Engine works.
+Add a fixed-capacity Engine timer facility only after the minimal Engine passes
+its acceptance checks.
 It uses caller time, explicit capacity/handle failures, deterministic callback
 order, cancellation, and no catch-up bursts.
 
@@ -102,6 +101,6 @@ services enter only when a real application needs them.
 - Implement the smallest usable milestone and verify its behavior.
 - Keep portable code bounded, explicit, C++17, and free of product/platform
   policy.
-- Update `PROGRESS.md` when the implemented state changes.
+- Update `PROGRESS.md` when status or evidence changes.
 - Keep exact measurements in benchmark result records; do not turn compile
   success into a runtime or hardware claim.

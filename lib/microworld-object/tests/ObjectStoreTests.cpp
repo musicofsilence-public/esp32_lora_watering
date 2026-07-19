@@ -649,4 +649,50 @@ MW_TEST_CASE(ObjectStoreRejectsDestructionCallbackReentryWithoutLeakingRoots)
 	MW_EXPECT_EQ(Test, 0U, StoreStats.ActiveRoots, "Destruction and stale reset must leave no root token");
 }
 
+// A derived-to-base conversion preserves store and generation; a base-to-derived
+// conversion is rejected at compile time so a stale generation cannot be widened.
+static_assert(
+	std::is_constructible<TObjectPtr<UObject>, const TObjectPtr<FTrackedObject>&>::value,
+	"A derived traced reference must convert to its managed base.");
+static_assert(
+	!std::is_constructible<TObjectPtr<FTrackedObject>, const TObjectPtr<UObject>&>::value,
+	"A base traced reference must not widen to an arbitrary derived type.");
+
+/** Proves the derived-to-base conversion preserves store, generation, and resolution. */
+MW_TEST_CASE(TObjectPtrDerivedToBaseConversionPreservesStoreAndGeneration)
+{
+	// Base-to-derived conversion remains a compile-time error for any caller.
+	static_assert(
+		!std::is_convertible<const TObjectPtr<UObject>&, TObjectPtr<FTrackedObject>>::value,
+		"Implicit base-to-derived conversion must stay disabled.");
+
+	FObjectLifetimeState Lifetime{};
+	TClassRegistry<2> Registry;
+	const FClassDescriptor* Descriptor = nullptr;
+	const EObjectResult RegistrationResult = RegisterTrackedDescriptor(Registry, Descriptor);
+	TObjectStoreFixture<128, 16, 2, 0> Fixture(MakeClassRegistryView(Registry));
+	FObjectStore& Store = Fixture.GetStore();
+
+	const TObjectCreationResult<FTrackedObject> Creation = Store.NewObject<FTrackedObject>(*Descriptor, Lifetime);
+	const TObjectPtr<FTrackedObject> Derived = Creation.Object;
+	const TObjectPtr<UObject> Base = TObjectPtr<UObject>(Derived);
+	const TObjectPtr<FTrackedObject> SameType = TObjectPtr<FTrackedObject>(Derived);
+
+	const EObjectResult ExpectedSuccess = EObjectResult::Success;
+	const FObjectHandle ExpectedHandle = Derived.Handle();
+	const FTrackedObject* const DerivedResolved = Derived.Get();
+	const UObject* const BaseResolved = Base.Get();
+	const FTrackedObject* const SameTypeResolved = SameType.Get();
+	const bool bBaseSharesStore = Base.BelongsTo(Store);
+	const bool bSameTypeSharesStore = SameType.BelongsTo(Store);
+	MW_EXPECT_EQ(Test, ExpectedSuccess, RegistrationResult, "The tracked class should register before conversion");
+	MW_EXPECT_EQ(Test, ExpectedSuccess, Creation.Result, "One tracked object should publish for conversion");
+	MW_EXPECT_EQ(Test, ExpectedHandle, Base.Handle(), "Derived-to-base conversion must preserve the handle identity");
+	MW_EXPECT_EQ(Test, ExpectedHandle, SameType.Handle(), "Same-type conversion must preserve the handle identity");
+	MW_EXPECT_EQ(Test, static_cast<const UObject*>(DerivedResolved), BaseResolved, "Conversion must resolve the same object");
+	MW_EXPECT_EQ(Test, DerivedResolved, SameTypeResolved, "Same-type conversion must resolve the same object");
+	MW_EXPECT_TRUE(Test, bBaseSharesStore, "Derived-to-base conversion must preserve store membership");
+	MW_EXPECT_TRUE(Test, bSameTypeSharesStore, "Same-type conversion must preserve store membership");
+}
+
 } // namespace

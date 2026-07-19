@@ -15,8 +15,18 @@ option(
     "Build the host Core+Memory+Object consumer without PlatformIO/ESP-IDF"
     OFF
 )
+option(
+    MICROWORLD_STANDALONE_ENGINE_CONSUMER
+    "Build the host Core+Memory+Object+Engine consumer without PlatformIO/ESP-IDF"
+    OFF
+)
 
-if(MICROWORLD_STANDALONE_CONSUMER OR MICROWORLD_STANDALONE_MEMORY_CONSUMER OR MICROWORLD_STANDALONE_OBJECT_CONSUMER)
+if(
+    MICROWORLD_STANDALONE_CONSUMER
+    OR MICROWORLD_STANDALONE_MEMORY_CONSUMER
+    OR MICROWORLD_STANDALONE_OBJECT_CONSUMER
+    OR MICROWORLD_STANDALONE_ENGINE_CONSUMER
+)
     project(microworld_standalone_consumer LANGUAGES CXX)
 
     if(MSVC)
@@ -132,6 +142,52 @@ if(MICROWORLD_STANDALONE_CONSUMER OR MICROWORLD_STANDALONE_MEMORY_CONSUMER OR MI
         microworld_enable_profile_map(
             microworld_object_consumer
             "${CMAKE_CURRENT_BINARY_DIR}/microworld_object_profile.map"
+        )
+    endif()
+
+    if(MICROWORLD_STANDALONE_ENGINE_CONSUMER)
+        set(
+            MICROWORLD_OBJECT_BUILD_TESTS
+            OFF
+            CACHE BOOL "" FORCE
+        )
+        set(
+            MICROWORLD_OBJECT_BUILD_BENCHMARKS
+            OFF
+            CACHE BOOL "" FORCE
+        )
+        add_subdirectory(
+            "${CMAKE_CURRENT_LIST_DIR}/../../../microworld-object"
+            "${CMAKE_CURRENT_BINARY_DIR}/microworld-object"
+        )
+        set(
+            MICROWORLD_ENGINE_BUILD_TESTS
+            OFF
+            CACHE BOOL "" FORCE
+        )
+        set(
+            MICROWORLD_ENGINE_BUILD_BENCHMARKS
+            OFF
+            CACHE BOOL "" FORCE
+        )
+        add_subdirectory(
+            "${CMAKE_CURRENT_LIST_DIR}/../../../microworld-engine"
+            "${CMAKE_CURRENT_BINARY_DIR}/microworld-engine"
+        )
+        add_executable(
+            microworld_engine_consumer
+            src/EngineNativeMain.cpp
+        )
+        target_link_libraries(
+            microworld_engine_consumer
+            PRIVATE MicroWorld::Engine
+        )
+        microworld_consumer_enable_strict_portable_flags(
+            microworld_engine_consumer
+        )
+        microworld_enable_profile_map(
+            microworld_engine_consumer
+            "${CMAKE_CURRENT_BINARY_DIR}/microworld_engine_profile.map"
         )
     endif()
 else()

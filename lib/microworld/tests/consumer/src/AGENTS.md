@@ -8,9 +8,11 @@ Inherits `../AGENTS.md`.
 `MemoryNativeMain.cpp` and `MemoryEsp32Main.cpp` exercise the Core+Memory
 profile through one shared public-API probe. `ObjectNativeMain.cpp` and
 `ObjectEsp32Main.cpp` exercise the Core+Memory+Object profile through fixed
-storage, root, weak-reference, and collection APIs. `Esp32BenchmarkMain.cpp`
-remains the only target runtime harness. The parent project guarantees that
-only one entry point is linked per environment.
+storage, root, weak-reference, and collection APIs. `EngineNativeMain.cpp` and
+`EngineEsp32Main.cpp` exercise the accepted Core+Memory+Object+Engine compile
+profile.
+`Esp32BenchmarkMain.cpp` remains the only target runtime harness. The parent
+project guarantees that only one entry point is linked per environment.
 
 ## Concepts and boundaries
 
@@ -23,6 +25,8 @@ only one entry point is linked per environment.
   Memory archive evidence.
 - Object probes retain one root through collection, then prove weak expiry
   after unrooted reclamation through public APIs.
+- Engine probes cover representative registration, lifecycle, tick, and
+  collection APIs without claiming target runtime behavior.
 - The benchmark owns ESP-IDF counters, serial output, heap/stack sampling, and
   fixed workloads so target dependencies remain outside MicroWorld.
 - Benchmark validation compares cumulative tick counts after every trial to
@@ -33,6 +37,7 @@ only one entry point is linked per environment.
 Document functions, workload constants, result fields, and accumulated state by
 the evidence they produce. Keep probes minimal and benchmark work fixed and
 bounded.
+
 - Verify with `pio run -d lib/microworld/tests/consumer -e native`,
-  `-e esp32-s3`, `-e esp32-s3-memory`, `-e esp32-s3-object`, or
-  `-e esp32-s3-benchmark`.
+  `-e esp32-s3`, `-e esp32-s3-memory`, `-e esp32-s3-object`,
+  `-e esp32-s3-engine`, or `-e esp32-s3-benchmark`.

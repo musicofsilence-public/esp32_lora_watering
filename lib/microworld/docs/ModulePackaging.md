@@ -9,7 +9,7 @@ dependency boundary.
 | Core | `MicroWorld::Core` | `MicroWorld` | Released |
 | Memory | `MicroWorld::Memory` | `MicroWorldMemory` | Implemented candidate |
 | Object | `MicroWorld::Object` | `MicroWorldObject` | Implemented candidate |
-| Engine | `MicroWorld::Engine` | `MicroWorldEngine` | Not created; next milestone |
+| Engine | `MicroWorld::Engine` | `MicroWorldEngine` | Implemented candidate |
 | Net | `MicroWorld::Net` | `MicroWorldNet` | Not created; later milestone |
 
 PlatformIO selects a library's source set through its manifest. It does not use
@@ -36,3 +36,5 @@ map check. Exact recorded package, map, and ESP32-S3 compile facts are in the
 [Memory](../../microworld-memory/benchmarks/Results/Esp32S3N16R8.md), and
 [Object](../../microworld-object/benchmarks/Results/Esp32S3N16R8.md) evidence
 records.
+
+Engine status and evidence are tracked in [PROGRESS.md](../PROGRESS.md).

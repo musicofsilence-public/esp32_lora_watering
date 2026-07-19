@@ -1,0 +1,38 @@
+# MicroWorld Engine Package
+
+Inherits `../AGENTS.md`.
+
+## Architecture
+
+Engine is the managed-runtime layer above Object:
+`Core <- Memory <- Object <- Engine`. It may depend only on those inward
+packages and the C++17 standard library.
+
+The package owns `UWorld`, `AActor`, and `UActorComponent`. Downward ownership
+is traced, parent observations are weak, and applications own all fixed
+registration storage and roots. Engine does not own timers, networking,
+runtime spawn/destroy, threads, platform adapters, or hardware APIs.
+
+## Concepts and boundaries
+
+- Registration closes at `BeginPlay` and failures must leave ownership and
+  registration unchanged.
+- `UWorld` traces Actors; `AActor` traces Components; parent links are weak and
+  expire when the parent is reclaimed. Engine creates no hidden roots.
+- Begin and Advance use registration order; End uses reverse registration
+  order. Components dispatch before their Actor during Begin and Advance.
+- Caller-owned registries must outlive the objects they back. The application
+  also owns the object store, root table, GC worklist, and World root.
+- Constructors, destruction hooks, and reference visitors must not perform
+  structural object-store or collection work.
+- Keep portable code bounded, allocation-free in steady state, single-pass, free
+  of structural mutation during dispatch, and free of RTTI, exceptions, hidden
+  clocks, threads, and SDK calls.
+
+## Verification
+
+Build the package and standalone consumer with C++17, strict warnings,
+exceptions disabled, and RTTI disabled. Run Engine behavior tests and the
+dependency/profile checks after changes. Keep Engine absent from lower-package
+profiles. Live status and evidence belong only in
+`../microworld/PROGRESS.md`.

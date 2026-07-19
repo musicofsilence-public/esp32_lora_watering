@@ -55,12 +55,10 @@ hardware authorization.
 
 ## Next scope
 
-Memory and Object/GC are adjacent implementation candidates that support the
-next minimal managed Engine: `UWorld`, `AActor`, and `UActorComponent`. The
-application explicitly roots its World; the World traces Actors and Actors
-trace Components while parent links remain weak. Timers, then simple Net
-(`INetDriver`, fixed-capacity `FNetManager`, bounded byte I/O, and host
-loopback), and an ESP32-S3 example follow only after that works.
+The minimal managed Engine (`UWorld`, `AActor`, `UActorComponent`) is an
+accepted implementation candidate above Memory and Object. The next scope is
+simple fixed-capacity Engine timers, with simple Net and an ESP32-S3 example
+later.
 
 Core does not provide runtime spawn/destroy, timers, networking policy,
 reflection, hardware abstraction, or a real-time guarantee.

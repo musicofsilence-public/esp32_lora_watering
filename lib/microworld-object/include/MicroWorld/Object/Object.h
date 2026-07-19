@@ -52,6 +52,9 @@ protected:
 	/** Keeps deletion behind the descriptor/store boundary while supporting exact derived destruction. */
 	virtual ~UObject() noexcept = default;
 
+	/** Returns the canonical store assigned after publication, or null during unmanaged construction. */
+	FObjectStore* GetObjectStore() const noexcept { return Store; }
+
 	/** Exposes outgoing managed references to the iterative collector without reflection. */
 	virtual void VisitReferences(FReferenceCollector&) noexcept {}
 

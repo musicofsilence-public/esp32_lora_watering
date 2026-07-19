@@ -12,6 +12,8 @@ elseif(MICROWORLD_CONSUMER_ENVIRONMENT STREQUAL "esp32-s3-memory")
     set(MICROWORLD_CONSUMER_SOURCE MemoryEsp32Main.cpp)
 elseif(MICROWORLD_CONSUMER_ENVIRONMENT STREQUAL "esp32-s3-object")
     set(MICROWORLD_CONSUMER_SOURCE ObjectEsp32Main.cpp)
+elseif(MICROWORLD_CONSUMER_ENVIRONMENT STREQUAL "esp32-s3-engine")
+    set(MICROWORLD_CONSUMER_SOURCE EngineEsp32Main.cpp)
 elseif(MICROWORLD_CONSUMER_ENVIRONMENT STREQUAL "esp32-s3-benchmark")
     set(MICROWORLD_CONSUMER_SOURCE Esp32BenchmarkMain.cpp)
 else()
@@ -22,7 +24,11 @@ endif()
 
 idf_component_register(SRCS "${MICROWORLD_CONSUMER_SOURCE}")
 
-if(MICROWORLD_CONSUMER_ENVIRONMENT STREQUAL "esp32-s3-memory" OR MICROWORLD_CONSUMER_ENVIRONMENT STREQUAL "esp32-s3-object")
+if(
+    MICROWORLD_CONSUMER_ENVIRONMENT STREQUAL "esp32-s3-memory"
+    OR MICROWORLD_CONSUMER_ENVIRONMENT STREQUAL "esp32-s3-object"
+    OR MICROWORLD_CONSUMER_ENVIRONMENT STREQUAL "esp32-s3-engine"
+)
     # PlatformIO forwards project build flags to ESP-IDF C sources as well as
     # this C++ component. Keep C++-only portability gates on the target that
     # instantiates Memory's representative public templates. GCC 15.2's

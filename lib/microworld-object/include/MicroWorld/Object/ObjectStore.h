@@ -12,6 +12,39 @@ namespace MicroWorld
 {
 
 class FGarbageCollector;
+class FObjectStore;
+
+/**
+ * Prevents object publication, destruction, root acquisition, and collection
+ * while one bounded callback cascade runs.
+ *
+ * Acquisition fails without blocking when construction, destruction, collection,
+ * or another dispatch already owns the mutation boundary. Releasing an existing
+ * root token remains allowed so noexcept RAII cleanup cannot leak reachability;
+ * release alone cannot reclaim or reuse an object.
+ */
+class FObjectStoreDispatchGuard final
+{
+public:
+	/** Tries to exclude lifetime-changing work from one callback cascade. */
+	explicit FObjectStoreDispatchGuard(FObjectStore& Store) noexcept;
+
+	/** Releases callback exclusion only when this instance acquired it. */
+	~FObjectStoreDispatchGuard() noexcept;
+
+	/** Prevents two guards from releasing one dispatch reservation. */
+	FObjectStoreDispatchGuard(const FObjectStoreDispatchGuard&) = delete;
+
+	/** Prevents replacing this guard's unique dispatch reservation. */
+	FObjectStoreDispatchGuard& operator=(const FObjectStoreDispatchGuard&) = delete;
+
+	/** Reports whether callback dispatch may proceed under this guard. */
+	bool IsAcquired() const noexcept { return ObjectStore != nullptr; }
+
+private:
+	/** Identifies the store reservation released at scope exit, or null after rejection. */
+	FObjectStore* ObjectStore{nullptr};
+};
 
 /** Identifies the store-owned lifecycle phase of one caller-supplied slot. */
 enum class EObjectSlotState : std::uint8_t
@@ -334,7 +367,13 @@ public:
 	/** Registers one independent root token after live-handle and capacity validation. */
 	EObjectResult AddRoot(FObjectHandle Handle) noexcept;
 
-	/** Releases one matching independent root token without affecting duplicates. */
+	/**
+	 * Releases one matching root token even while guarded work is active.
+	 *
+	 * Immediate release keeps noexcept strong-pointer cleanup leak-free. It changes
+	 * only future reachability; destruction, slot reuse, and collection remain
+	 * blocked until the active callback or mutation boundary ends.
+	 */
 	EObjectResult RemoveRoot(FObjectHandle Handle) noexcept;
 
 	/** Registers one independent root token and transfers it into an RAII owner. */
@@ -362,8 +401,12 @@ public:
 	/** Reports fixed capacity, current occupancy, roots, and slot fragmentation. */
 	FObjectStoreStats Stats() const noexcept;
 
+	/** Reports whether publication, destruction, root acquisition, or collection is currently blocked. */
+	bool IsMutationLocked() const noexcept { return bMutationLocked || bDispatchLocked || ActiveCollector != nullptr; }
+
 private:
 	friend class FGarbageCollector;
+	friend class FObjectStoreDispatchGuard;
 
 	/** Validates descriptor identity and exact T layout before any slot mutation. */
 	template<typename T>
@@ -429,7 +472,10 @@ private:
 	bool CollectorIsPendingDestroy(ObjectIndex SlotIndex) const noexcept;
 
 	/** Prevents a collector cycle from starting inside construction or destruction callbacks. */
-	bool CollectorIsMutationLocked() const noexcept { return bMutationLocked; }
+	bool CollectorIsMutationLocked() const noexcept { return bMutationLocked || bDispatchLocked; }
+
+	/** Gives callback dispatch precedence over collector phase validation. */
+	bool CollectorIsDispatchLocked() const noexcept { return bDispatchLocked; }
 
 	/** Atomically reserves public store mutation for one collector cycle. */
 	bool CollectorTryBegin(const FGarbageCollector& Collector) noexcept;
@@ -449,8 +495,14 @@ private:
 	/** Reclaims one generation-checked unmarked lifetime during bounded sweep. */
 	EObjectResult CollectorReclaim(FObjectHandle Handle) noexcept;
 
-	/** Rejects public structural mutation during callbacks or an active collection. */
-	bool IsPublicMutationLocked() const noexcept { return bMutationLocked || ActiveCollector != nullptr; }
+	/** Excludes lifetime-changing work from one non-nested callback cascade. */
+	bool TryBeginDispatch() noexcept;
+
+	/** Releases the callback reservation acquired by one dispatch guard. */
+	void EndDispatch() noexcept;
+
+	/** Rejects guarded publication, destruction, root acquisition, and collection work. */
+	bool IsPublicMutationLocked() const noexcept { return IsMutationLocked(); }
 
 	/** Retains non-owning fixed storage whose lifetime encloses this store. */
 	FObjectStoreStorage Storage{};
@@ -481,6 +533,9 @@ private:
 
 	/** Rejects callback reentry while construction or exact destruction is in progress. */
 	bool bMutationLocked{false};
+
+	/** Rejects structural store mutation throughout one Engine callback cascade. */
+	bool bDispatchLocked{false};
 
 	/** Identifies the collector that exclusively owns incremental store traversal. */
 	const FGarbageCollector* ActiveCollector{nullptr};

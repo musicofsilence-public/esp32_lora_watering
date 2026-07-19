@@ -114,6 +114,11 @@ FGarbageCollectionResult FGarbageCollector::Advance(const FGarbageCollectionBudg
 		CollectionResult.Result = ERuntimeResult::LifecycleLocked;
 		return CollectionResult;
 	}
+	if (ObjectStore != nullptr && ObjectStore->CollectorIsDispatchLocked())
+	{
+		CollectionResult.Result = ERuntimeResult::LifecycleLocked;
+		return CollectionResult;
+	}
 	if (CurrentPhase == EGarbageCollectionPhase::Idle || ObjectStore == nullptr)
 	{
 		CollectionResult.Result = ERuntimeResult::InvalidLifecycle;

@@ -2,10 +2,35 @@
 
 #include <MicroWorld/Object/Object.h>
 
+#include <type_traits>
+#include <utility>
+
 namespace MicroWorld
 {
 
 class FObjectStore;
+
+namespace ObjectDetail
+{
+
+	/** Enables conversions only after both complete endpoints prove managed ancestry. */
+	template<typename From, typename To, typename = void>
+	struct TIsManagedObjectPointerConversion : std::false_type
+	{
+	};
+
+	/** Accepts an accessible derived-to-base or same-type conversion between managed types. */
+	template<typename From, typename To>
+	struct TIsManagedObjectPointerConversion<
+		From,
+		To,
+		std::void_t<
+			decltype(static_cast<UObject*>(std::declval<typename std::remove_cv<From>::type*>())),
+			decltype(static_cast<UObject*>(std::declval<typename std::remove_cv<To>::type*>()))>> : std::is_convertible<From*, To*>
+	{
+	};
+
+} // namespace ObjectDetail
 
 /** Resolves one generation-checked handle without changing object-store state. */
 UObject* ResolveObjectHandle(const FObjectStore& Store, FObjectHandle Handle) noexcept;
@@ -13,7 +38,7 @@ UObject* ResolveObjectHandle(const FObjectStore& Store, FObjectHandle Handle) no
 /** Registers one independently owned explicit root after capacity validation. */
 EObjectResult AddObjectRoot(FObjectStore& Store, FObjectHandle Handle) noexcept;
 
-/** Releases one root token previously acquired by a successful strong-pointer factory. */
+/** Releases one root token immediately, including during guarded callback cleanup. */
 void ReleaseObjectRoot(FObjectStore& Store, FObjectHandle Handle) noexcept;
 
 /**
@@ -28,6 +53,19 @@ class TObjectPtr
 public:
 	/** Creates an empty traced reference that resolves to null. */
 	TObjectPtr() noexcept = default;
+
+	/**
+	 * Adopts one traced identity from a reference whose target is convertible to T.
+	 *
+	 * The conversion preserves store and generation so a derived-to-base reference
+	 * keeps tracing the same live object. The constraint independently limits
+	 * static type conversion to managed same-type or derived-to-base endpoints;
+	 * it does not perform runtime narrowing or reflection.
+	 */
+	template<typename U, typename = std::enable_if_t<ObjectDetail::TIsManagedObjectPointerConversion<U, T>::value>>
+	TObjectPtr(const TObjectPtr<U>& Other) noexcept : Store(Other.Store), Object(Other.Object)
+	{
+	}
 
 	/** Resolves index plus generation on every access and never caches a slot address. */
 	T* Get() const noexcept
@@ -52,6 +90,8 @@ private:
 	friend class FObjectStore;
 	template<typename>
 	friend class TWeakObjectPtr;
+	template<typename>
+	friend class TObjectPtr;
 
 	/** Creates a typed reference only after the store publishes a matching object lifetime. */
 	TObjectPtr(FObjectStore& ObjectStore, const FObjectHandle ObjectHandle) noexcept : Store(&ObjectStore), Object(ObjectHandle) {}
@@ -106,7 +146,7 @@ public:
 	/** Creates an empty root owner that consumes no root-table capacity. */
 	TStrongObjectPtr() noexcept = default;
 
-	/** Releases exactly the root token acquired for this instance. */
+	/** Releases exactly this token even during guarded callbacks so RAII cleanup cannot leak it. */
 	~TStrongObjectPtr() noexcept { Reset(); }
 
 	/** Prevents two owners from releasing one root token. */
@@ -154,7 +194,7 @@ public:
 	/** Reports whether this instance currently owns a resolvable root token. */
 	explicit operator bool() const noexcept { return Get() != nullptr; }
 
-	/** Releases this instance's independent root token and becomes empty. */
+	/** Immediately releases this token without triggering destruction or collection. */
 	void Reset() noexcept
 	{
 		if (Store != nullptr)

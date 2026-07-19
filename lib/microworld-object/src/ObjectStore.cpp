@@ -22,6 +22,22 @@ namespace
 
 } // namespace
 
+FObjectStoreDispatchGuard::FObjectStoreDispatchGuard(FObjectStore& Store) noexcept
+{
+	if (Store.TryBeginDispatch())
+	{
+		ObjectStore = &Store;
+	}
+}
+
+FObjectStoreDispatchGuard::~FObjectStoreDispatchGuard() noexcept
+{
+	if (ObjectStore != nullptr)
+	{
+		ObjectStore->EndDispatch();
+	}
+}
+
 FObjectStore::FObjectStore(const FObjectStoreStorage InStorage, const FClassRegistryView InClasses) noexcept : Storage(InStorage), Classes(InClasses)
 {
 	const bool bHasSlotPointers = Storage.SlotCount > 0 && Storage.SlotBytes != nullptr && Storage.Slots != nullptr;
@@ -174,6 +190,8 @@ EObjectResult FObjectStore::RemoveRoot(const FObjectHandle Handle) noexcept
 		return EObjectResult::StaleHandle;
 	}
 
+	// Root release stays available to noexcept RAII cleanup. It can only affect a
+	// later collection; guarded destruction and slot reuse remain impossible.
 	for (std::uint32_t RootIndex = 0; RootIndex < Storage.RootCapacity; ++RootIndex)
 	{
 		if (Storage.Roots[RootIndex].Handle == Handle)
@@ -387,6 +405,21 @@ EObjectResult FObjectStore::CollectorReclaim(const FObjectHandle Handle) noexcep
 {
 	FObjectSlotMetadata* const Slot = FindMatchingSlot(Handle, true);
 	return Slot != nullptr ? DestroySlot(Handle.Index) : EObjectResult::StaleHandle;
+}
+
+bool FObjectStore::TryBeginDispatch() noexcept
+{
+	if (IsMutationLocked())
+	{
+		return false;
+	}
+	bDispatchLocked = true;
+	return true;
+}
+
+void FObjectStore::EndDispatch() noexcept
+{
+	bDispatchLocked = false;
 }
 
 UObject* ResolveObjectHandle(const FObjectStore& Store, const FObjectHandle Handle) noexcept
