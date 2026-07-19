@@ -6,8 +6,12 @@ Inherits `../AGENTS.md`.
 
 Documentation is a read-only description of the released package contract.
 `Style.md` owns naming and comment policy, `Porting.md` owns downstream
-toolchain/measurement obligations, and `Performance.md` owns optimization
-methodology. Runtime code never depends on prose.
+toolchain/measurement obligations, `Performance.md` owns optimization
+methodology, `UE5ConceptMap.md` distinguishes released and planned UE-inspired
+semantics, `ResourceBudgets.md` owns profile evidence gates,
+`ModulePackaging.md` owns physical module selection and its build evidence, and
+`decisions/` records accepted architectural direction. Runtime code never
+depends on prose.
 
 ## Concepts
 
@@ -17,6 +21,8 @@ methodology. Runtime code never depends on prose.
 - Porting guidance separates compile evidence from observed target behavior.
 - Package documentation may describe future work but must not make it part of
   the current API.
+- Decision records are append-only explanations of accepted direction. A later
+  decision supersedes an earlier record rather than rewriting its history.
 
 ## Verification
 

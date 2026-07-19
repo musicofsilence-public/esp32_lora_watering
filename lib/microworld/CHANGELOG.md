@@ -27,8 +27,8 @@ Initial verification:
   Core 6.1.19, Espressif 32 platform 7.0.1, and ESP-IDF 6.0.1;
 - the repository's existing ESP32-S3 firmware environment still compiles and
   no firmware was uploaded or run;
-- the PlatformIO native consumer still requires a host GNU `g++` compiler on
-  `PATH` before that environment-specific probe can pass.
+- the PlatformIO native consumer compiles with WinLibs GCC 16.1.0 on the user
+  `PATH`, and its generated `program.exe` returns exit code zero.
 
 Known limitations:
 

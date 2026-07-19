@@ -1,4 +1,5 @@
 #include <MicroWorld/Application.h>
+#include <MicroWorld/TickFunction.h>
 #include <MicroWorld/Version.h>
 #include <MicroWorld/World.h>
 
@@ -14,8 +15,14 @@ static_assert(MicroWorld::Version.Patch == 0);
 int main()
 {
 	MicroWorld::TWorld<1> ConsumerCompileProbe;
+	MicroWorld::FTickFunction CoreArchiveProbe({true, true, 0});
+	CoreArchiveProbe.BeginPlay(0);
+	const MicroWorld::FTickDecision TickDecision = CoreArchiveProbe.Advance(0);
+	CoreArchiveProbe.EndPlay();
+
 	return ConsumerCompileProbe.BeginPlay(0) == MicroWorld::ERuntimeResult::Success
-			&& ConsumerCompileProbe.EndPlay() == MicroWorld::ERuntimeResult::Success
+			&& ConsumerCompileProbe.EndPlay() == MicroWorld::ERuntimeResult::Success && TickDecision.Result == MicroWorld::ERuntimeResult::Success
+			&& TickDecision.bShouldTick
 		? 0
 		: 1;
 }

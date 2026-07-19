@@ -63,6 +63,9 @@ cmake --build <build-directory>
 ctest --test-dir <build-directory> --output-on-failure
 ```
 
+New CMake consumers link `MicroWorld::Core`. The physical `microworld` target
+remains available for released 0.1 compatibility.
+
 PlatformIO downstream probes consume the local 0.1.0 package without adding
 platform dependencies to MicroWorld:
 
@@ -73,9 +76,10 @@ pio run -d lib/microworld/tests/consumer -e esp32-s3-benchmark
 ```
 
 The native PlatformIO environment requires a host GNU `g++` compiler on
-`PATH`. The ESP32-S3 environments use PlatformIO's managed Espressif toolchain.
-These commands build only; uploading or running the target benchmark is a
-separate explicitly authorized hardware step.
+`PATH`; it currently passes with WinLibs GCC 16.1.0. The ESP32-S3 environments
+use PlatformIO's managed Espressif toolchain. These commands build only;
+uploading or running the target benchmark is a separate explicitly authorized
+hardware step.
 
 The platform-neutral example is `examples/HostLifecycle/Main.cpp`. Performance
 methods and evidence are in [docs/Performance.md](docs/Performance.md), with
@@ -83,15 +87,30 @@ host results in [benchmarks/Results/Host.md](benchmarks/Results/Host.md) and
 ESP32-S3 compile/runtime status in
 [benchmarks/Results/Esp32S3N16R8.md](benchmarks/Results/Esp32S3N16R8.md).
 
+## Approved engine evolution
+
+MicroWorld 0.1 remains the released deterministic lifecycle/tick API. The
+approved pre-1.0 direction adds separately gated Memory, Object, Engine,
+Serialization, and Net capabilities without making managed memory mandatory.
+The adjacent Memory package is implemented as a Gate C candidate but is not
+promoted or released; later capabilities remain roadmap work.
+
+- [UE5-to-MicroWorld concept and semantic map](docs/UE5ConceptMap.md)
+- [CMake/PlatformIO module packaging and Gate B/Gate C evidence](docs/ModulePackaging.md)
+- [Profile resource budgets and evidence states](docs/ResourceBudgets.md)
+- [Accepted architecture decision records](docs/decisions)
+- [Porting and target-evidence obligations](docs/Porting.md)
+
 ## Verification status
 
-The initial implementation passes its 31 host behavior tests, CTest integration,
-strict public-header compilation, class-documentation check, and folder-guide
-coverage check. The exact-version ESP32-S3 basic and benchmark consumers compile
-successfully, as does the repository's existing firmware environment. The
-native PlatformIO probe remains an environment-only gate on machines without
-GNU `g++`; target cycle, heap, and stack measurements remain blocked until an
-explicitly authorized hardware run.
+The implementation passes its 31 host behavior cases, CTest integration,
+dependency and profile-map gates, strict public-header compilation,
+class-documentation check, and folder-guide coverage check. Standalone CMake
+and exact-version ESP32-S3 PlatformIO Core consumers compile successfully, as
+does the repository's existing firmware environment. The native PlatformIO
+consumer compiles with WinLibs GCC 16.1.0 and returns exit code zero. Target
+cycle, heap, and stack measurements remain blocked until an explicitly
+authorized hardware run.
 
 Maintained C/C++ files are formatted with the repository `clang-format` policy.
 Public functions and persistent state carry intent-focused contracts explaining

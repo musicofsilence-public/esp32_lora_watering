@@ -1,9 +1,10 @@
 {
   "name": "MicroWorld",
   "version": "0.1.0",
-  "description": "Bounded C++17 lifecycle and ticking framework for embedded applications",
+  "description": "MicroWorld Core: bounded C++17 lifecycle and ticking for embedded applications",
   "keywords": [
     "embedded",
+    "core",
     "lifecycle",
     "tick"
   ],
@@ -12,6 +13,7 @@
   "platforms": "*",
   "build": {
     "includeDir": "include",
-    "srcDir": "src"
+    "srcDir": "src",
+    "libArchive": true
   }
 }
