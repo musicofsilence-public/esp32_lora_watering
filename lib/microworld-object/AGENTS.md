@@ -5,9 +5,9 @@ Inherits `../AGENTS.md`.
 ## Architecture
 
 `microworld-object` is the adjacent portable managed-identity package above
-Memory. Its dependency direction is `Core <- Memory <- Object`: future Engine
-and applications may depend on Object, while Object may depend only on Memory,
-Core, and the C++17 standard library.
+Memory. Its dependency direction is `Core <- Memory <- Object`: higher
+packages may depend on Object, while Object may depend only on Memory, Core,
+and the C++17 standard library.
 
 ## Concepts and boundaries
 
@@ -24,8 +24,7 @@ Core, and the C++17 standard library.
   writable storage deliberately prevents optimized identical-data folding.
 - Managed identity is local process state, never a wire identity or platform
   handle.
-- No Engine, Serialization, Net, Integration, port, SDK, thread, clock, or
-  hardware API may enter this package.
+- No engine policy, SDK, thread, clock, or hardware API may enter this package.
 
 ## Verification
 

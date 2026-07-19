@@ -14,6 +14,11 @@ API, implementation, tests, examples, benchmarks, and release metadata.
 - Platform adapters stay outside platform-neutral packages.
 - Package tests and tools may depend on public APIs; production code never
   depends on tests, examples, benchmarks, or validation scripts.
+- Implement the smallest usable milestone; do not add an abstraction or package
+  until current code needs it.
+- A directory inherits the nearest `AGENTS.md`. Add a local guide only when it
+  introduces a distinct dependency boundary, ownership/lifecycle rule, or
+  verification procedure; do not create one merely for directory coverage.
 
 ## Documentation and format
 

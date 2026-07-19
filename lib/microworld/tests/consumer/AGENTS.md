@@ -34,8 +34,8 @@ MicroWorld never depends on these fixtures.
   isolated build directory.
 - Both ESP32 environments inherit repository N16R8 flash, PSRAM, and partition
   defaults but never upload unless separately authorized.
-- Future profiles add one `lib_deps` entry per adjacent module package; they do
-  not change the Core manifest's source filter.
+- Each selected package has its own `lib_deps` entry; it does not change the
+  Core manifest's source filter.
 
 ## Documentation and verification
 

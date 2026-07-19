@@ -5,8 +5,8 @@ Inherits `../AGENTS.md`.
 ## Architecture
 
 `include/` is the only supported compile-time surface of the Memory package.
-Future higher modules and applications depend inward on these headers; public
-headers never include implementation, tests, ports, or product code.
+Higher packages and applications depend inward on these headers; public headers
+never include implementation, tests, platform code, or product code.
 
 ## Concepts and boundaries
 

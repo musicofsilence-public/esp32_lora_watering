@@ -22,6 +22,6 @@ object identity and collection.
 ## Verification
 
 Compile the contract and fixed arena independently under C++17, strict
-warnings, no exceptions, and no RTTI. Behavior tests for alignment, exhaustion,
-reuse, malformed blocks, double free, and counters are owned by the later
-memory-test roadmap task.
+warnings, no exceptions, and no RTTI. Keep behavior tests for alignment,
+exhaustion, reuse, malformed blocks, double free, and counters public and
+focused.

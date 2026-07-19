@@ -24,6 +24,5 @@ descriptor-visible references drive explicit iterative tracing.
 
 ## Verification
 
-Compile headers without exceptions or RTTI. Future behavior tests must cover
-roots, cycles, stale handles, bounded work, and deferred destruction through
-public contracts.
+Compile headers without exceptions or RTTI. Behavior tests cover roots, cycles,
+stale handles, bounded work, and deferred destruction through public contracts.

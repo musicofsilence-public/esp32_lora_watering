@@ -13,6 +13,10 @@ state documentation remains a declaration-level review requirement because a
 regex-only parser must not pretend to understand arbitrary C++. Production code
 never imports or invokes these scripts.
 
+`CheckFolderAgents.py` is a strict coverage check for the existing packages
+when deliberately invoked. It is not a policy requiring every future package
+subdirectory to add a local guide.
+
 ## Concepts
 
 - Scans operate only under an explicit root.

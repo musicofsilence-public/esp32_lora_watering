@@ -1,7 +1,7 @@
 # MicroWorld C++ Style
 
-MicroWorld uses an embedded adaptation of UE5 naming without implying UObject
-features.
+MicroWorld uses an embedded adaptation of UE5 naming without implying Unreal
+compatibility.
 
 | Kind | Rule | Example |
 |---|---|---|
@@ -14,9 +14,10 @@ features.
 | Public identifier | PascalCase | `SetTickInterval` |
 | Public header | PascalCase, type-aligned | `TickFunction.h` |
 
-`A` and `U` prefixes are forbidden because these types do not derive from
-Unreal `AActor` or `UObject`. Reflection vocabulary such as `UCLASS`,
-`UPROPERTY`, and `GENERATED_BODY` is also forbidden.
+`A` and `U` are reserved for real MicroWorld managed types with Object-store
+identity, tracing, and lifecycle semantics. They do not imply Unreal
+inheritance or source compatibility. Reflection vocabulary such as `UCLASS`,
+`UPROPERTY`, and `GENERATED_BODY` remains forbidden.
 
 Every complete class or class template has an adjacent one-to-three-sentence
 `/** ... */` contract. Every function declaration, enumerator, configuration

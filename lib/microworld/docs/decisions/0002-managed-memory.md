@@ -38,17 +38,17 @@ deterministic lifetimes that must not wait for collection.
 - GC never runs from an ISR, reads a hidden clock, starts a background thread,
   or owns hardware/safety services.
 
-`UObject`, `AActor`, `UActorComponent`, and `UWorld` cannot become released
-public names until identity, root/cycle/weak behavior, destruction order, work
-budgets, and target resource evidence pass.
+`UObject` is implemented by the Object candidate. `UWorld`, `AActor`, and
+`UActorComponent` are the next Engine milestone and must preserve these
+identity, tracing, lifecycle, and bounded-work rules.
 
 ## Implementation evidence
 
 On 2026-07-19, the Object candidate at `e1e7b75` recorded evidence for handles,
 descriptors, roots, object storage, and bounded incremental GC. See
-[ModulePackaging.md](../ModulePackaging.md). This does not establish an
-Engine-based Managed profile or target runtime acceptance. Current promotion
-and owner state belongs in [PROGRESS.md](../../PROGRESS.md).
+[ModulePackaging.md](../ModulePackaging.md). This does not establish Engine
+behavior or target runtime acceptance. Current implementation state belongs in
+[PROGRESS.md](../../PROGRESS.md).
 
 ## Consequences
 

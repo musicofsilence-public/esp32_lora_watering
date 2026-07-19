@@ -1,6 +1,6 @@
 # ADR 0002a: Smart-Pointer Foundations
 
-- **Status:** Accepted for Gate C roadmap progression; Memory remains experimental pending target-margin evidence
+- **Status:** Accepted pointer foundation; Memory target runtime margins remain unmeasured
 - **Date:** 2026-07-19
 - **Decision owner:** Project owner
 
@@ -47,7 +47,7 @@ atomic/toolchain compile probe, and target benchmark justify it.
 types, not aliases for unique/shared ownership. `UObject` allocation through
 `TUniquePtr` or `TSharedPtr` is rejected.
 
-## Required Gate C comparison
+## Comparison criteria
 
 | Candidate | Verify |
 | --- | --- |
@@ -59,7 +59,7 @@ types, not aliases for unique/shared ownership. `UObject` allocation through
 Select the smallest clear implementation that passes. Record rejected
 candidates and target measurements before releasing the API.
 
-## Gate C evidence
+## Recorded evidence
 
 The 2026-07-19 MSVC x64 public-API benchmark recorded:
 
@@ -88,10 +88,9 @@ runtime or accepted-budget evidence.
 Detailed measurements are recorded in
 [`microworld-memory/benchmarks/Results`](../../../microworld-memory/benchmarks/Results).
 
-## Accepted Gate C decision
+## Accepted decision
 
-The project owner accepted the following direction for roadmap progression on
-2026-07-19:
+The project owner accepted the following direction on 2026-07-19:
 
 1. retain the std-backed thin `TUniquePtr`; the measured direct standard
    equivalent has identical size, and the wrapper adds the typed factory and
@@ -105,8 +104,8 @@ The project owner accepted the following direction for roadmap progression on
    for this release because its C++17 allocation-failure contract is
    exception-based, not because the successful allocation layout is larger;
 5. keep Memory experimental until target margins are measured and accepted;
-   Gate C acceptance does not invent an absolute budget or establish target
-   runtime support.
+   this decision does not invent an absolute budget or establish target runtime
+   support.
 
 ## Consequences
 

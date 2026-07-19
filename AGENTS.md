@@ -204,6 +204,8 @@ mutable state, boolean state soup, and hidden hardware side effects.
 - MicroWorld is an independent lifecycle/tick package under `lib/microworld`;
   the tutorial may consume a pinned release later but must not redesign it
   during a lesson.
+- MicroWorld work implements the smallest usable current milestone. Do not add
+  speculative modules, abstractions, or process documents ahead of a real need.
 
 ## Code documentation and formatting
 

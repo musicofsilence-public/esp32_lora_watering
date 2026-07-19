@@ -6,7 +6,7 @@ Inherits `../AGENTS.md`.
 
 This directory extends the shared `MicroWorld` namespace only with Object
 contracts. It may use Core and Memory contracts but must not duplicate them or
-introduce Engine, Serialization, Net, Integration, platform, or port APIs.
+introduce higher-package, platform, or port APIs.
 
 ## Concepts
 

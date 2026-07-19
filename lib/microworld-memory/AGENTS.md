@@ -4,15 +4,13 @@ Inherits `../AGENTS.md`.
 
 ## Architecture
 
-`microworld-memory` is the adjacent portable ownership package above
-MicroWorld Core. Its dependency direction is `Core <- Memory`: applications,
-future Object/Engine modules, tests, and ports may depend on Memory, while
-Memory may depend only on Core and the C++17 standard library.
+`microworld-memory` is the adjacent portable ownership package above Core.
+Its dependency direction is `Core <- Memory`: higher packages may depend on
+Memory, while Memory may depend only on Core and the C++17 standard library.
 
 The package owns explicit memory-resource contracts and caller-supplied bounded
-storage. It does not own a platform heap, managed objects, garbage collection,
-engine policy, serialization, networking, integration adapters, or vendor SDK
-code.
+storage. It does not own a platform heap, managed objects, engine policy, or
+vendor SDK code.
 
 ## Concepts and boundaries
 
@@ -32,4 +30,4 @@ Configure and build this package independently with CMake, compile its public
 headers under C++17 with strict warnings, exceptions disabled, and RTTI
 disabled, run the Core dependency-boundary checker with explicit Core and
 Memory package roots, and run the package tests and benchmarks required by the
-current candidate gate. Live status belongs in `../microworld/PROGRESS.md`.
+current package scope. Live status belongs in `../microworld/PROGRESS.md`.

@@ -6,7 +6,8 @@ Inherits `../AGENTS.md`.
 
 `include/` is the only supported compile-time surface of the Object package.
 Public headers may depend inward on Memory and Core public headers, never on
-Object implementation, tests, benchmarks, engines, ports, or product code.
+Object implementation, tests, benchmarks, higher packages, platform code, or
+product code.
 
 ## Concepts
 
