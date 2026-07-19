@@ -66,6 +66,7 @@ reflection, hardware abstraction, or a real-time guarantee.
 ## Evidence and details
 
 - [Current status and evidence](PROGRESS.md)
+- [Package architecture](docs/ModulePackaging.md)
 - [Concept map](docs/UE5ConceptMap.md)
 - [Resource rules](docs/ResourceBudgets.md)
 - [Host benchmark](benchmarks/Results/Host.md)

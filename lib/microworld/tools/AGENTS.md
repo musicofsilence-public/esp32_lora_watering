@@ -26,8 +26,9 @@ subdirectory to add a local guide.
 - Dependency ownership is declared explicitly as `MODULE=PATH`; a package may
   not hide another module below its own manifest.
 - Profile checks inspect archive, path, and public-symbol markers. Every
-  profile requires positive Core archive evidence, and Memory-selected profiles
-  additionally require the adjacent Memory archive.
+  profile requires positive Core archive evidence; Memory- and Object-selected
+  profiles additionally require their adjacent package archives. The current
+  managed profile includes Core, Memory, Object, and Engine.
 - Each architectural checker owns a deterministic `--self-test` covering both
   an accepted input and the violation it is intended to block.
 - Scripts return non-zero on failure so CMake or CI can use them as gates.
@@ -43,5 +44,7 @@ Verify module boundaries with
 `python lib/microworld/tools/CheckDependencyBoundaries.py --package Core=lib/microworld`
 and verify a built Core map with
 `python lib/microworld/tools/CheckProfileMap.py --map <linker-map> --profile Core`.
-Use `--profile Memory` for a Core+Memory map.
+Use `--profile Memory` for Core+Memory, `--profile Object` for
+Core+Memory+Object, and `--profile Managed` for
+Core+Memory+Object+Engine.
 Run each new checker with `--self-test` before trusting its repository result.

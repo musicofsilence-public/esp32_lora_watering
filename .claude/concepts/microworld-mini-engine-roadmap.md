@@ -1,4 +1,9 @@
-# MicroWorld Mini Engine
+# MicroWorld Mini Engine Concept
+
+> **Accepted design concept.** This document records durable scope and
+> rationale; it is not the live status record. Current implementation,
+> evidence, and next work belong in
+> [PROGRESS.md](../../lib/microworld/PROGRESS.md).
 
 MicroWorld is a small portable C++17 runtime that borrows a few useful UE-style
 ideas without trying to reproduce UE. It is for bounded embedded applications,
@@ -12,14 +17,15 @@ not a desktop game engine.
   delegates, and non-managed ownership helpers.
 - **Object** provides managed identity, handles, roots, descriptors, and
   bounded incremental garbage collection.
+- **Engine** provides managed `UWorld`, `AActor`, and `UActorComponent`
+  lifecycle, tick dispatch, traced children, and weak parent links.
 
-Core is released. Memory and Object are implemented candidates; their target
-runtime margins have not yet been measured. That qualification does not block
-the next Engine implementation.
+Core is released. Memory, Object, and Engine are implemented candidates; their
+target runtime margins have not yet been measured.
 
-## First useful engine
+## First useful engine scope
 
-The next milestone is a minimal managed Engine:
+The accepted minimal managed Engine contains:
 
 - `UWorld`, `AActor`, and `UActorComponent`;
 - fixed-capacity registration before `BeginPlay`;
@@ -35,14 +41,12 @@ through collection without parent ownership cycles.
 The first version is intentionally static after play begins. Dynamic spawn and
 destroy can wait until a real application needs them.
 
-## Near-term sequence
+## Remaining sequence
 
-After the minimal Engine works:
-
-1. add simple fixed-capacity timers to Engine;
-2. add simple Net: bounded byte reader/writer, one non-blocking `INetDriver`,
-   one small fixed-capacity `FNetManager`, and a host loopback;
-3. add one ESP32-S3 example that uses the runtime.
+1. Add simple fixed-capacity timers to Engine.
+2. Add simple Net: bounded byte reader/writer, one non-blocking `INetDriver`,
+   one small fixed-capacity `FNetManager`, and a host loopback.
+3. Add one ESP32-S3 example that uses the runtime.
 
 The application coordinates Engine and Net directly. There is no separate
 Engine-Net bridge or subsystem framework in this first design.
