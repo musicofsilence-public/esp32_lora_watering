@@ -1,4 +1,21 @@
-# Library Boundary
+# MicroWorld Package Family
+
+## Product vision
+
+MicroWorld is a mini engine for microcontrollers, shaped as a small UE5-like
+runtime so UE5 game developers can carry familiar concepts into MCU work. It
+helps make small applications, interactive software, and games easier to build
+by providing a lightweight framework above platform and hardware interaction.
+
+It is not a full UE5 clone. Keep only essential embedded-suitable features:
+lifecycle, World, Actor, and Component concepts; optional bounded GC; smart
+pointers; simple bounded networking through `FNetManager` and `INetDriver`; and
+resource-efficient behavior. Portable code is intended to work with thin
+platform adapters for ESP32, STM32, Raspberry Pi Pico/RP2040-class, and similar
+MCUs; this is a product direction, not a claim that every target is supported.
+
+This is the durable mission. The active roadmap still implements the smallest
+usable milestone first and defers speculative systems until a real need exists.
 
 ## Architecture
 
