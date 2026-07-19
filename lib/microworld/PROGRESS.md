@@ -16,6 +16,14 @@ passed its acceptance checks; target runtime margins remain unmeasured.
 | Engine | Implemented candidate; target runtime margins unmeasured |
 | Net | Later, after simple Engine timers |
 
+## Visual roadmap
+
+![MicroWorld implementation journey](docs/diagrams/microworld-implementation-roadmap.svg)
+
+[Open the high-resolution PNG](docs/diagrams/microworld-implementation-roadmap.png)
+or inspect the
+[editable Mermaid source](docs/diagrams/microworld-implementation-roadmap.mmd).
+
 ## Done
 
 - Core: bounded non-owning World/Actor/Component registration, deterministic

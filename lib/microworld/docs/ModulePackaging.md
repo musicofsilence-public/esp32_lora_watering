@@ -4,6 +4,14 @@ MicroWorld keeps the implemented layers in separate packages so a small
 application does not compile unused source and each package has a clear
 dependency boundary.
 
+## Architecture view
+
+![MicroWorld C4 container architecture](diagrams/microworld-c4-architecture.svg)
+
+[Open the high-resolution PNG](diagrams/microworld-c4-architecture.png) or
+inspect the
+[editable Mermaid source](diagrams/microworld-c4-architecture.mmd).
+
 | Package | CMake target | PlatformIO package | State |
 | --- | --- | --- | --- |
 | Core | `MicroWorld::Core` | `MicroWorld` | Released |
