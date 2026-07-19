@@ -245,11 +245,13 @@ optimization, and explicit evidence gates.
 
 ### Assumptions & Prerequisites
 
-- **Assumes:** MicroWorld plan
-  `.claude/plans/microworld-framework.md` has been implemented and verified.
-- **Requires:** `MicroWorld::Version == 0.1.0` and the exact full source commit
-  recorded by the framework release probes. Any change requires a tutorial
-  dependency revision.
+- **Requires:** the released MicroWorld 0.1 contract in
+  [`lib/microworld/README.md`](../../lib/microworld/README.md) and
+  [`CHANGELOG.md`](../../lib/microworld/CHANGELOG.md), plus the exact version
+  and consumer evidence recorded with that release. `MicroWorld::Version` must
+  equal `0.1.0`; any change requires a tutorial dependency revision.
+- **Constraint:** post-0.1 roadmap features are not tutorial prerequisites
+  unless a tutorial dependency explicitly versions and accepts them.
 - **Requires:** Current ESP32 LED project remains the Tutorial 1 starting point.
 - **Requires:** Physical actions remain user-authorized and exact hardware data
   is supplied at the relevant gates.

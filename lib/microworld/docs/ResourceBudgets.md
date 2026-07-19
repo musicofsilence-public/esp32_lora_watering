@@ -3,6 +3,8 @@
 MicroWorld accepts a target/profile only when its resource limits and evidence
 are explicit. Phase 0 defines invariants and measurement ownership; it does not
 invent absolute limits for hardware that has not been selected or run.
+Current gate state is in [PROGRESS.md](../PROGRESS.md); this document owns
+resource facts and budget rules.
 
 ## Evidence states
 
@@ -59,20 +61,25 @@ converted into invented limits.
 | ESP32 whole-image flash | Project owner | Compile-measured | 194,457 / 4,194,304 bytes | Complete image, not isolated Memory delta |
 | Target heap/stack/timing | Project owner | Unresolved | No claim without authorized execution | Hardware run remains blocked |
 
-## Managed ownership tier
+## Object resource evidence and future Managed profile
 
-Managed is optional per build. These budgets must pass before managed types are
-released.
+Recorded Object measurements follow. Live release and gate state belongs in
+[PROGRESS.md](../PROGRESS.md). Engine-based Managed composition is future work;
+these measurements do not establish target budgets.
 
 | Metric | Owner | Status | Required or provisional value | Evidence / next action |
 | --- | --- | --- | --- | --- |
-| Object arena bytes | Application | Provisional | Exact caller-provided capacity; no fallback | Object-store tests and profile configuration |
+| Object slot storage | Application | Host benchmark configuration | 64 configured slots; 8,192 slot bytes | [Object host evidence](../../microworld-object/benchmarks/Results/Host.md); not a target budget |
+| Object metadata bytes | Object module | Host benchmark configuration | 2,048 bytes (32 per slot) | [Object host evidence](../../microworld-object/benchmarks/Results/Host.md); re-measure on targets |
+| Object benchmark payload | Object module | Host benchmark configuration | 64-byte payload in a 128-byte slot | [Object host evidence](../../microworld-object/benchmarks/Results/Host.md); not a target budget |
+| Root storage | Application | Host benchmark configuration | 8 bytes | [Object host evidence](../../microworld-object/benchmarks/Results/Host.md); not a target budget |
+| GC worklist | Object module | Host benchmark configuration | 512 bytes | [Object host evidence](../../microworld-object/benchmarks/Results/Host.md); not a target budget |
+| Collection work | Object module | Host benchmark configuration | 97 total operations; maximum 12 per incremental slice | [Object host evidence](../../microworld-object/benchmarks/Results/Host.md); not a target budget |
 | Maximum object count | Application | Provisional | Exact slot count; capacity failure observable | Object-store boundary tests |
 | Maximum object size/alignment | Application | Provisional | Exact arena layout; unsupported layout rejected | Layout boundary tests |
-| Metadata bytes/object | Object module | Unresolved | Measure index, generation, flags, descriptor, and GC state | Host and target `sizeof`/map report |
-| Fixed-slot internal fragmentation | Object module | Unresolved | Record workload distribution before adding size classes | Object benchmark |
+| Fixed-slot internal fragmentation | Object module | Host benchmark configuration | 2,048 bytes after collection for the benchmark's 32 live objects | [Object host evidence](../../microworld-object/benchmarks/Results/Host.md); collect real workloads before size classes |
 | Root capacity | Application | Provisional | Fixed and explicit; root creation may fail | Root-capacity tests |
-| GC work/update | Application | Provisional | No more than caller-provided root/mark/sweep operations | Incremental budget tests |
+| Configured GC work/update | Application | Provisional | No more than caller-provided root/mark/sweep operations | Incremental budget tests |
 | GC stack growth | Object module | Accepted invariant | Fixed iterative worklist; no graph recursion | Maximum-depth/cycle tests |
 | Hidden full collection | Object module | Accepted invariant | Forbidden on allocation failure | OOM behavior tests |
 | Managed steady-state heap delta | Managed profile | Provisional | Zero when fixed resources are selected | Authorized target heap measurement |
@@ -96,12 +103,12 @@ Net may be linked with Core or Managed.
 
 ## Target evidence matrix
 
-| Target | Core compile | Core runtime | Managed | Net | Current status |
+| Target | Core | Memory | Object | Engine | Net | Evidence boundary |
 | --- | --- | --- | --- | --- | --- |
-| Windows x64 / MSVC | Measured | Measured host-relative | Memory measured; Managed not implemented | Not implemented | Development host only |
-| ESP32-S3-WROOM-1-N16R8 | Compile-measured | Unresolved; run not authorized | Memory compile-measured; Managed not implemented | Not implemented | Core+Memory compile probe |
-| STM32 reference target | Unresolved | Unresolved | Unresolved | Unresolved | Exact board/SDK/toolchain not selected |
-| RP2040/RP2350 reference target | Unresolved | Unresolved | Unresolved | Unresolved | Exact board/SDK/toolchain not selected |
+| Windows x64 / MSVC | Host-measured | Host-measured | Host-measured | No evidence recorded | No evidence recorded | Development-host evidence only |
+| ESP32-S3 N16R8 | Compile-measured | Compile-measured | Compile-measured | No evidence recorded | No evidence recorded | No upload/runtime authorization |
+| STM32 reference target | No evidence recorded | No evidence recorded | No evidence recorded | No evidence recorded | No evidence recorded | Exact target not selected |
+| RP2040/RP2350 reference target | No evidence recorded | No evidence recorded | No evidence recorded | No evidence recorded | No evidence recorded | Exact target not selected |
 
 Current host and ESP32 measurements are recorded in
 [benchmarks/Results](../benchmarks/Results). Target selection and measurement

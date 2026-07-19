@@ -30,5 +30,6 @@ code.
 
 Configure and build this package independently with CMake, compile its public
 headers under C++17 with strict warnings, exceptions disabled, and RTTI
-disabled, and run the Core dependency-boundary checker with explicit Core and
-Memory package roots. Tests and benchmarks enter only in their roadmap tasks.
+disabled, run the Core dependency-boundary checker with explicit Core and
+Memory package roots, and run the package tests and benchmarks required by the
+current candidate gate. Live status belongs in `../microworld/PROGRESS.md`.

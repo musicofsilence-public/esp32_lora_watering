@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+Memory and Object are development candidates, not part of the MicroWorld 0.1
+release contract. [PROGRESS.md](PROGRESS.md) owns their live evidence and gate
+state.
+
+- Adjacent Memory ownership and utility candidate.
+- Adjacent Object identity and bounded-GC candidate.
+- Package, dependency, and profile gates with evidence documentation.
+
 ## 0.1.0 - 2026-07-18
 
 Initial source release contract:

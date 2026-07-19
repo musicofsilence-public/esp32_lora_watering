@@ -400,6 +400,10 @@ traceability, and Markdown structure instead.
   there as results.
 - `README.md` stays a concise orientation and links to the detailed sources.
 - Checked-in code/config/tests remain authoritative for what is implemented.
+- `lib/microworld/PROGRESS.md` is the sole live MicroWorld status record. Any
+  MicroWorld change to implementation, gate, evidence, decision, blocker, or
+  next milestone must update it in the same commit; reviewers reject changes
+  that omit that update.
 - When an unresolved hardware or protocol decision becomes accepted, update
   this file, the relevant guide section, tests, and decision/measurement log in
   the same change.

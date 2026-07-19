@@ -19,8 +19,8 @@ Net. Vendor ports depend on portable contracts and never reverse that
 direction.
 
 `lib/microworld` is the Core PlatformIO package and the physical
-`microworld`/`MicroWorld::Core` CMake library. The Memory Gate C candidate and
-future portable modules use adjacent packages and manifests because PlatformIO
+`microworld`/`MicroWorld::Core` CMake library. The Memory Gate C and Object
+Gate D candidates use adjacent packages and manifests because PlatformIO
 builds every source admitted by a selected library manifest. Profiles compose
 packages; they never mutate Core's source set with feature macros. The released
 `FNetwork` remains a Core lifecycle/tick boundary and is not the future Net
@@ -37,7 +37,8 @@ module.
 - Runtime failures return typed results; MicroWorld never logs, throws, reads
   hardware, or defines product policy.
 - Managed memory, garbage collection, and dynamic Actor behavior are approved
-  roadmap capabilities, not part of the released 0.1 API.
+  roadmap capabilities. Object APIs are candidates, not released 0.1 API;
+  borrowed `U`/`A` names cannot be promoted or released before their gates.
 - GC is optional per build but first-class when Managed is linked. Hardware,
   ISR, watchdog, transport-driver, and safety lifetimes remain deterministic
   and outside GC.
@@ -63,6 +64,9 @@ module.
 - Treat `.claude/plans/microworld-mini-engine-roadmap.md` as the approved
   implementation sequence; public headers, tests, and release documentation
   remain authoritative for what is actually implemented.
+- Treat `PROGRESS.md` as the sole live status record. Update it in the same
+  commit when a MicroWorld implementation, gate, evidence, decision, blocker,
+  or next milestone changes; reviewers reject omissions.
 
 ## Verification
 

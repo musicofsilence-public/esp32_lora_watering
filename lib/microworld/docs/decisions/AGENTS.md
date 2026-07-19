@@ -11,6 +11,10 @@ triggers.
 
 ## Concepts
 
+- `../../PROGRESS.md` owns current state; headers/tests/release metadata own
+  released truth; result documents own measurements; package and budget docs
+  own their respective build/map and resource facts; concept/roadmap own
+  strategy and sequence.
 - An accepted direction is not evidence that its API is implemented or
   released.
 - A record distinguishes fixed invariants from provisional mechanisms.

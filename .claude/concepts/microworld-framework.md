@@ -1,5 +1,12 @@
 # MicroWorld Framework
 
+> **Status — historical approved v0.1 concept.** This concept was implemented
+> and released in commit `c54f3c4`. The released contract and evidence live in
+> [MicroWorld README](../../lib/microworld/README.md),
+> [CHANGELOG](../../lib/microworld/CHANGELOG.md), and
+> [benchmark results](../../lib/microworld/benchmarks/Results/). It is not the
+> active post-0.1 roadmap.
+
 ## Problem
 
 The ESP32 learning guide currently mixes two different subjects: implementing a

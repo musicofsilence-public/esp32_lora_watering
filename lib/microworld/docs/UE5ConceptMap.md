@@ -5,10 +5,15 @@ applications. It does not provide UE5 source, binary, module, editor, or asset
 compatibility. A familiar name is used only when MicroWorld implements the
 ownership and lifecycle semantics that make that name honest.
 
+This source-anchored map covers released Core 0.1 and candidate contracts at
+`e1e7b75`. [PROGRESS.md](../PROGRESS.md) owns live gate and promotion state.
+
 ## Maturity labels
 
 - **Released** — available in the current public headers and covered by
   behavior tests.
+- **Candidate contract at `e1e7b75`** — source-anchored candidate semantics,
+  not a released API or accepted target support.
 - **Approved direction** — accepted architecture, but not a released API.
 - **Deferred** — intentionally excluded until a measured application need
   justifies a new decision.
@@ -24,30 +29,31 @@ ownership and lifecycle semantics that make that name honest.
 | `UActorComponent` | `FActorComponent` | Released static form in 0.1 | Consumer-owned, non-GC behavior registered with one Actor |
 | Primary Actor/Component tick | `FTickFunction` through `FTickable` | Released in 0.1 | Caller supplies monotonic milliseconds; no tick groups, prerequisites, time dilation, or catch-up bursts |
 | Engine subsystem | `FNetwork` or a consumer-owned lifecycle boundary | Released minimal form in 0.1 | `FNetwork` only schedules a policy-free hook; it is not `FNetManager` or a transport |
-| Managed `UObject` identity | `UObject` plus `FObjectHandle` | Approved direction | Fixed caller-owned store, explicit descriptors, no UE reflection/code generation |
+| Managed `UObject` identity | `UObject` plus `FObjectHandle` | Candidate contract at `e1e7b75` | Fixed caller-owned store, explicit descriptors, no UE reflection/code generation |
 | Dynamic managed World | `UWorld` | Approved direction | Bounded mutation queues and explicit barriers; no seamless travel or level streaming |
 | Managed Actor | `AActor` | Approved direction | Exists only after object identity, tracing, lifecycle, and destruction gates pass |
 | Managed Actor Component | `UActorComponent` | Approved direction | World/Actor own children strongly; reverse owner links are weak |
-| `NewObject` / `SpawnActor` | Object-store construction plus deferred World attachment | Approved direction | Capacity/OOM is explicit; active iteration is never mutated |
-| Garbage collection | `FGarbageCollector` | Approved direction | Optional per build, fixed-capacity, non-moving, explicit-root, iterative, and operation-budgeted |
-| `TObjectPtr` | `TObjectPtr` | Approved direction | Generation-checked local identity; a local pointer variable is not an implicit root |
-| `TWeakObjectPtr` | `TWeakObjectPtr` | Approved direction | Resolves through store index and generation; stale reuse cannot alias a new object |
-| `TStrongObjectPtr` | `TStrongObjectPtr` | Approved direction | Explicit bounded root registration with observable capacity failure |
+| `NewObject` | Object-store construction | Candidate contract at `e1e7b75` | Capacity/OOM is explicit through the fixed object store |
+| `SpawnActor` | Deferred World attachment | Approved direction | Bounded mutation queues prevent active iteration from changing |
+| Garbage collection | `FGarbageCollector` | Candidate contract at `e1e7b75` | Optional per build, fixed-capacity, non-moving, explicit-root, iterative, and operation-budgeted |
+| `TObjectPtr` | `TObjectPtr` | Candidate contract at `e1e7b75` | Generation-checked local identity; a local pointer variable is not an implicit root |
+| `TWeakObjectPtr` | `TWeakObjectPtr` | Candidate contract at `e1e7b75` | Resolves through store index and generation; stale reuse cannot alias a new object |
+| `TStrongObjectPtr` | `TStrongObjectPtr` | Candidate contract at `e1e7b75` | Explicit bounded root registration with observable capacity failure |
 | `FTimerManager` | Bounded timer manager | Approved direction | At most budgeted callbacks; late looping timers do not catch up in bursts |
-| Delegates | Fixed-inline single/multicast delegates | Approved direction | Callable and binding capacities are explicit; no hidden heap spill |
+| Delegates | Fixed-inline single/multicast delegates | Candidate contract at `e1e7b75` | Callable and binding capacities are explicit; no hidden heap spill |
 
 ## Ownership concepts
 
-| UE5/C++ concept | Planned MicroWorld rule |
-| --- | --- |
-| Stack/value ownership | Preferred for deterministic services and small state |
-| `TUniquePtr` | Exclusive non-`UObject` ownership backed by an injected memory resource |
-| `TSharedPtr` / `TWeakPtr` | Reference-counted non-`UObject` ownership; single-threaded portable baseline |
-| `TObjectPtr` | Managed reference traced only through an object descriptor/reference visitor |
-| `TWeakObjectPtr` | Non-owning managed observation |
-| `TStrongObjectPtr` | Explicit external GC root |
-| Raw pointer/reference | Short documented scope where the owner is known and pointer stability is guaranteed |
-| Hardware/ISR/watchdog/safety state | Never GC-owned; use values, fixed storage, or deterministic ownership |
+| UE5/C++ concept | MicroWorld rule | Maturity |
+| --- | --- | --- |
+| Stack/value ownership | Preferred for deterministic services and small state | Released Core practice |
+| `TUniquePtr` | Exclusive non-`UObject` ownership backed by an injected memory resource | Candidate contract at `e1e7b75` |
+| `TSharedPtr` / `TWeakPtr` | Reference-counted non-`UObject` ownership; single-threaded portable baseline | Candidate contract at `e1e7b75` |
+| `TObjectPtr` | Managed reference traced only through an object descriptor/reference visitor | Candidate contract at `e1e7b75` |
+| `TWeakObjectPtr` | Non-owning managed observation | Candidate contract at `e1e7b75` |
+| `TStrongObjectPtr` | Explicit external GC root | Candidate contract at `e1e7b75` |
+| Raw pointer/reference | Short documented scope where the owner is known and pointer stability is guaranteed | Released Core practice |
+| Hardware/ISR/watchdog/safety state | Never GC-owned; use values, fixed storage, or deterministic ownership | Approved invariant |
 
 The pointer-foundation decision is recorded in
 [0002a-smart-pointer-foundation.md](decisions/0002a-smart-pointer-foundation.md).

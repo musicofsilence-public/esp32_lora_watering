@@ -1,5 +1,11 @@
 # MicroWorld Mini Engine
 
+> **Status and authority.** This is the active post-0.1 architecture concept.
+> Current implementation and gate state are owned by
+> [MicroWorld progress](../../lib/microworld/PROGRESS.md); the executable
+> sequence is the [mini-engine roadmap](../plans/microworld-mini-engine-roadmap.md).
+> This concept records durable decisions, not live progress.
+
 ## Problem
 
 MicroWorld 0.1.0 is a small, deterministic lifecycle and primary-tick kernel.
@@ -32,25 +38,23 @@ modules, and make every dynamic resource bounded and observable.
 
 ### Target module boundaries
 
-- **Core** — retain lifecycle, monotonic caller-supplied time, deterministic
-  ticking, typed results, and fixed registration; add allocators, bounded
-  containers, spans/optionals, delegates/events, assertions, log sinks,
-  diagnostics, and UE-style utility vocabulary.
-- **Object** — add a real managed-object contract before using `U`/`A` names:
-  `UObject`, `AActor`, `UActorComponent`, stable object identities,
-  `TObjectPtr`, `TWeakObjectPtr`, explicit class/reference metadata, spawning,
-  deferred destruction, and a bounded collector.
-- **Memory** — provide allocator-aware `TUniquePtr`, `TSharedPtr`, and
-  `TWeakPtr` with ownership semantics explicitly separate from GC-traced object
-  references. Applications choose and own the backing memory resources.
-- **Engine** — add a small engine loop, `UWorld`, subsystems, timers, bounded
-  event routing, Actor/Component lifecycle, and dynamic spawn/destroy queues.
-  Existing deterministic hardware or safety services remain ordinary
-  consumer-owned objects outside GC.
-- **Net** — add `FNetManager`, an `INetDriver` transport boundary, fixed packet
-  readers/writers, bounded queues, peer/session/object identities, validation,
-  counters, and optional descriptor-driven replication. Transport adapters and
-  application protocol/security policy remain separate.
+- **Core** — retain released lifecycle, caller-supplied monotonic time, typed
+  results, deterministic ticking, bounded registration, and minimal
+  diagnostics.
+- **Memory** — own injected memory resources, fixed arenas/storage utilities,
+  bounded containers/spans/delegates, and allocator-aware `TUniquePtr`,
+  `TSharedPtr`, and `TWeakPtr` for non-object ownership.
+- **Object** — own `UObject` identity, stable handles, descriptors,
+  `TObjectPtr`, `TWeakObjectPtr`, `TStrongObjectPtr`, the object store, roots,
+  and bounded GC. Actor, Component, World, and spawning behavior stay in Engine.
+- **Engine** — own `UWorld`, `AActor`, `UActorComponent`, subsystems, timers,
+  managed lifecycle, and bounded spawn/destroy queues. Deterministic hardware
+  and safety services remain consumer-owned objects outside GC.
+- **Serialization** — provide explicit bounded byte archives with named widths,
+  byte order, lengths, versions, and failures.
+- **Net** — own `INetDriver`, `FNetManager`, sessions, validation, and bounded
+  queues. It depends inward on Core, Memory, and Serialization, never Engine;
+  Engine-Net scheduling belongs to a separate bridge.
 - **Platform contracts and ports** — keep the engine modules free of ESP-IDF,
   STM32 HAL, Pico SDK, Arduino, or RTOS headers. Downstream port packages adapt
   clocks, memory diagnostics, entropy, critical sections, logging, byte
@@ -79,13 +83,16 @@ to confuse.
 
 ### Product profiles
 
-- **Core profile** — lifecycle, tick, containers, delegates, diagnostics, and
-  deterministic ownership; intended for the smallest or safety-sensitive
-  applications.
-- **Managed profile** — Core plus object metadata, Actor/Component runtime,
-  fixed-arena allocation, and incremental GC.
-- **Connected profile** — Managed or Core plus serialization, `FNetManager`,
-  one or more `INetDriver` implementations, and optional replication.
+- **Core** — released lifecycle, tick, time, results, bounded registration, and
+  minimal diagnostics.
+- **Memory** — Core plus injected resources, utilities, bounded containers and
+  delegates, and non-object smart ownership.
+- **Object** — Core plus Memory, managed identity, references, storage, roots,
+  and bounded GC.
+- **Managed** — Core plus Memory, Object, and Engine.
+- **Core+Net** — Core plus Memory, Serialization, and Net.
+- **Managed+Net** — Managed plus Serialization and Net, with the optional
+  Engine-Net bridge when Engine scheduling is required.
 
 Profiles are bundles of separately linkable targets rather than one
 preprocessor-heavy monolith. Link-time dead stripping remains useful, but each

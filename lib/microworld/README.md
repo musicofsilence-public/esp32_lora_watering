@@ -1,8 +1,11 @@
-# MicroWorld 0.1.0
+# MicroWorld Core 0.1.0
 
-MicroWorld is a standalone C++17 lifecycle and primary-tick framework for
-bounded embedded applications. It has no ESP32, RTOS, radio, transport, or
-product-policy dependency.
+This is the released Core package: a standalone C++17 lifecycle and primary-
+tick framework for bounded embedded applications. It has no ESP32, RTOS, radio,
+transport, or product-policy dependency; adjacent candidates are not Core 0.1.
+
+> **Project status:** [PROGRESS.md](PROGRESS.md) is the sole live record for
+> implementation, gates, evidence, blockers, and next milestones.
 
 ## Ownership and lifetime
 
@@ -87,21 +90,20 @@ host results in [benchmarks/Results/Host.md](benchmarks/Results/Host.md) and
 ESP32-S3 compile/runtime status in
 [benchmarks/Results/Esp32S3N16R8.md](benchmarks/Results/Esp32S3N16R8.md).
 
-## Approved engine evolution
+## Engine evolution
 
 MicroWorld 0.1 remains the released deterministic lifecycle/tick API. The
-approved pre-1.0 direction adds separately gated Memory, Object, Engine,
-Serialization, and Net capabilities without making managed memory mandatory.
-The adjacent Memory package is implemented as a Gate C candidate but is not
-promoted or released; later capabilities remain roadmap work.
+post-0.1 direction adds separately gated Memory, Object, Engine, Serialization,
+and Net capabilities without making managed memory mandatory. Read
+[PROGRESS.md](PROGRESS.md) for current candidate and gate state.
 
 - [UE5-to-MicroWorld concept and semantic map](docs/UE5ConceptMap.md)
-- [CMake/PlatformIO module packaging and Gate B/Gate C evidence](docs/ModulePackaging.md)
+- [CMake/PlatformIO module packaging and Gates B–D evidence](docs/ModulePackaging.md)
 - [Profile resource budgets and evidence states](docs/ResourceBudgets.md)
 - [Accepted architecture decision records](docs/decisions)
 - [Porting and target-evidence obligations](docs/Porting.md)
 
-## Verification status
+## Released Core 0.1 verification
 
 The implementation passes its 31 host behavior cases, CTest integration,
 dependency and profile-map gates, strict public-header compilation,
@@ -117,7 +119,7 @@ Public functions and persistent state carry intent-focused contracts explaining
 their ownership, lifecycle, scheduling, or evidence role. Scoped `AGENTS.md`
 files describe the architecture and concepts owned by every package directory.
 
-## Known limitations
+## Released Core 0.1 limitations
 
 v0.1 has no runtime registration/removal, dynamic spawning, lookup, reflection,
 garbage collection, event bus, transforms, protocol policy, tick groups,

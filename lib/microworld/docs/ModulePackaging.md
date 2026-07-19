@@ -3,6 +3,7 @@
 MicroWorld uses separately linkable modules and separately manifested
 PlatformIO packages. Phase 1 validates the Core package and the checks that
 later module candidates must pass; it does not create empty future packages.
+Current gate state is in [PROGRESS.md](../PROGRESS.md).
 
 ## Why packages are separate
 
@@ -13,9 +14,9 @@ builds every source admitted by that manifest after selecting the library.
 select different module source sets per consumer environment.
 
 MicroWorld therefore does not use feature macros or generated source filters as
-its ownership boundary. The released `MicroWorld` package is Core. Memory,
-Object, Engine, Serialization, Net, Integration, and Platform packages will be
-created adjacent to it only when their implementation phase begins.
+its ownership boundary. The released `MicroWorld` package is Core; adjacent
+Memory and Object packages now exist as candidates. Engine, Serialization, Net,
+Integration, and Platform packages remain future work.
 
 Official behavior used for this decision:
 
@@ -29,18 +30,19 @@ Official behavior used for this decision:
 
 ## Target and package names
 
-Names below Future are reserved architecture, not released artifacts.
+The table records package presence only. [PROGRESS.md](../PROGRESS.md) owns
+live gate and promotion state.
 
 | Module | CMake target | PlatformIO package | Repository root | State |
 | --- | --- | --- | --- | --- |
-| Core | `MicroWorld::Core` | `MicroWorld` | `lib/microworld` | Validated |
-| Memory | `MicroWorld::Memory` | `MicroWorldMemory` | `lib/microworld-memory` | Gate C candidate |
-| Object | `MicroWorld::Object` | `MicroWorldObject` | `lib/microworld-object` | Gate D candidate |
-| Engine | `MicroWorld::Engine` | `MicroWorldEngine` | `lib/microworld-engine` | Future |
-| Serialization | `MicroWorld::Serialization` | `MicroWorldSerialization` | `lib/microworld-serialization` | Future |
-| Net | `MicroWorld::Net` | `MicroWorldNet` | `lib/microworld-net` | Future |
-| Engine-Net bridge | `MicroWorld::EngineNet` | `MicroWorldEngineNet` | `lib/microworld-integration` | Future |
-| Platform contracts | `MicroWorld::Platform` | `MicroWorldPlatform` | `lib/microworld-platform` | Future |
+| Core | `MicroWorld::Core` | `MicroWorld` | `lib/microworld` | Released package |
+| Memory | `MicroWorld::Memory` | `MicroWorldMemory` | `lib/microworld-memory` | Existing candidate package |
+| Object | `MicroWorld::Object` | `MicroWorldObject` | `lib/microworld-object` | Existing candidate package |
+| Engine | `MicroWorld::Engine` | `MicroWorldEngine` | `lib/microworld-engine` | Reserved; package absent |
+| Serialization | `MicroWorld::Serialization` | `MicroWorldSerialization` | `lib/microworld-serialization` | Reserved; package absent |
+| Net | `MicroWorld::Net` | `MicroWorldNet` | `lib/microworld-net` | Reserved; package absent |
+| Engine-Net bridge | `MicroWorld::EngineNet` | `MicroWorldEngineNet` | `lib/microworld-integration` | Reserved; package absent |
+| Platform contracts | `MicroWorld::Platform` | `MicroWorldPlatform` | `lib/microworld-platform` | Reserved; package absent |
 
 The physical CMake target `microworld` remains available for 0.1 compatibility;
 `MicroWorld::Core` aliases the same static library. The released `FNetwork`
@@ -131,12 +133,16 @@ target execution:
   UndefinedBehaviorSanitizer;
 - no target runtime, heap, stack, timing, or physical behavior was claimed.
 
-These results support the proposed pointer-foundation decision, but final Gate C
-promotion and any absolute target budget remain project-owner decisions. The
-working paired host sanitizer toolchain is now recorded.
+The owner accepted Gate C for roadmap progression, while Memory remains
+experimental pending accepted target margins. These results do not promote a
+release or establish an absolute target budget. The working paired host
+sanitizer toolchain is now recorded.
 
 ## Phase 3 Object evidence
 
+Executable source is anchored to commit `e1e7b75`. See the exact
+[host Object evidence](../../microworld-object/benchmarks/Results/Host.md) and
+[ESP32 compile evidence](../../microworld-object/benchmarks/Results/Esp32S3N16R8.md).
 Gate D candidate integration was exercised on 2026-07-19 without upload or
 target execution:
 
@@ -177,8 +183,8 @@ target execution:
 
 Benchmark elapsed values are host-only observations. The ESP32 results are
 compile/link and static-size evidence; no target timing, stack, heap, runtime,
-or hardware behavior is claimed. The technical Gate D evidence is complete.
-Owner acceptance is still required before the Engine package and Phase 4 begin.
+or hardware behavior is claimed. For this dated source checkpoint, the
+technical Gate D evidence set is complete.
 
 ## Verification
 

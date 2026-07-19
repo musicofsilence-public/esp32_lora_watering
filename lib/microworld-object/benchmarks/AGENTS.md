@@ -18,3 +18,6 @@ operations, and slice bounds are the portable evidence.
 
 Validate each workload's semantic counters before recording costs. Keep host
 evidence distinct from authorized target measurements.
+
+`Results/` owns immutable, source- and environment-qualified evidence records.
+It does not own live gate state or promotion decisions.
