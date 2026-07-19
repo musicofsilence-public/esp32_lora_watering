@@ -52,7 +52,15 @@ enum class ETimerMode : std::uint8_t
 	Looping,
 };
 
-/** Identifies one live timer without exposing storage or extending callback lifetime. */
+/**
+ * Identifies one live timer without exposing storage or extending callback lifetime.
+ *
+ * A handle is local to the `TTimerManager` instance that issued it: it is a plain
+ * {slot index, generation} pair with no manager identity, and it must never be
+ * carried between managers or used after the issuing manager is destroyed. This
+ * milestone does not embed manager identity in the handle; correct use is the
+ * caller's responsibility.
+ */
 struct FTimerHandle final
 {
 	/** Reserves the maximum index as the invalid sentinel independent of manager capacity. */
@@ -104,26 +112,30 @@ public:
 	/** Stores the caller's initial clock as the scheduling baseline for every later operation. */
 	explicit TTimerManager(const TimePointMilliseconds InitialNow) noexcept : LastAcceptedNowMilliseconds{InitialNow} {}
 
-	/** Prevents copying fixed slots and their uniquely owned inline callbacks. */
+	/**
+	 * Destroys every bound callback without invoking any of them.
+	 *
+	 * Implicit destruction is sufficient: each `FTimerSlot` owns its `TDelegate`
+	 * member, and `TDelegate` destroys its bound callable exactly once. No
+	 * explicit Reset loop is needed.
+	 */
+	~TTimerManager() noexcept = default;
+
+	/** Prevents copying: the manager uniquely owns non-copyable inline callbacks and slot identity. */
 	TTimerManager(const TTimerManager&) = delete;
 
-	/** Prevents copy assignment from duplicating timer identity and callback ownership. */
+	/** Prevents copy assignment: it would duplicate uniquely owned callback and slot identity. */
 	TTimerManager& operator=(const TTimerManager&) = delete;
 
-	/** Keeps timer slot addresses and insertion-order storage stable for handle identity. */
+	/**
+	 * Prevents moving: the manager is an application-owned standalone value and handles
+	 * are {index, generation} pairs local to one issuing manager. Moving would silently
+	 * invalidate external outstanding handles without changing their stored values.
+	 */
 	TTimerManager(TTimerManager&&) = delete;
 
-	/** Keeps timer slot addresses and insertion-order storage stable for handle identity. */
+	/** Prevents move assignment for the same handle-validity reason as the deleted move ctor. */
 	TTimerManager& operator=(TTimerManager&&) = delete;
-
-	/** Destroys every bound callback without invoking any of them. */
-	~TTimerManager() noexcept
-	{
-		for (std::size_t SlotIndex = 0; SlotIndex < MaxTimers; ++SlotIndex)
-		{
-			Slots[SlotIndex].Callback.Reset();
-		}
-	}
 
 	/**
 	 * Schedules one bound delegate using a single duration as first delay and repeat period.
@@ -142,7 +154,9 @@ public:
 		{
 			return ETimerResult::DispatchLocked;
 		}
-		if (Mode == ETimerMode::None)
+		// Explicit allowlist so neither ETimerMode::None nor any arbitrary cast value
+		// (e.g. static_cast<ETimerMode>(3)) can silently become a valid schedule shape.
+		if (Mode != ETimerMode::OneShot && Mode != ETimerMode::Looping)
 		{
 			return ETimerResult::InvalidMode;
 		}
@@ -190,15 +204,19 @@ public:
 			return ETimerResult::StaleHandle;
 		}
 
-		RemoveActiveSlot(Slot, Handle);
+		CancelActiveSlot(Slot, Handle);
 		return ETimerResult::Success;
 	}
 
 	/**
 	 * Fires each timer due at the caller-supplied time in stable insertion order.
 	 *
-	 * A rolled-back clock is rejected transactionally; a nested Advance is
-	 * rejected while another dispatch is still active.
+	 * Completed one-shot timers are cleared in place during dispatch and then
+	 * removed from `InsertionOrder` by a single stable compaction pass after
+	 * every callback has returned, so dispatch is O(active + removed) total
+	 * rather than one linear search and shift per fired one-shot. A rolled-back
+	 * clock is rejected transactionally; a nested Advance is rejected while
+	 * another dispatch is still active.
 	 */
 	ETimerResult Advance(const TimePointMilliseconds Now) noexcept
 	{
@@ -249,7 +267,11 @@ public:
 
 			if (Slot.Mode == ETimerMode::OneShot)
 			{
-				RemoveActiveSlot(Slot, Handle);
+				// Clear and retire the slot in place; the live insertion-order entry is dropped
+				// by the single post-dispatch compaction pass so no per-fired shift is needed.
+				Slot.Callback.Reset();
+				Slot.bActive = false;
+				AdvanceGenerationOrRetire(Slot);
 			}
 			else
 			{
@@ -261,6 +283,8 @@ public:
 			}
 		}
 		bDispatchActive = false;
+
+		CompactInsertionOrder();
 		return ETimerResult::Success;
 	}
 
@@ -313,8 +337,14 @@ private:
 		return nullptr;
 	}
 
-	/** Clears one active timer, retires its slot as needed, and drops it from insertion order. */
-	void RemoveActiveSlot(FTimerSlot& Slot, const FTimerHandle Handle) noexcept
+	/**
+	 * Clears one caller-canceled timer and removes it from insertion order.
+	 *
+	 * Used only by `Cancel`, which runs outside dispatch; one bounded linear
+	 * removal remains acceptable there. `Advance` clears completed one-shots
+	 * in place and lets the post-dispatch compaction pass drop them together.
+	 */
+	void CancelActiveSlot(FTimerSlot& Slot, const FTimerHandle Handle) noexcept
 	{
 		Slot.Callback.Reset();
 		Slot.bActive = false;
@@ -334,7 +364,38 @@ private:
 		++Slot.Generation;
 	}
 
-	/** Compacts insertion order after removal without changing any remaining slot identity. */
+	/**
+	 * Drops every insertion-order entry whose slot is no longer active in one stable pass.
+	 *
+	 * After `Advance` clears completed one-shots in place, this single compaction
+	 * removes them all while preserving the relative order of the survivors. It
+	 * never consults callback state and never shifts a survivor past another.
+	 */
+	void CompactInsertionOrder() noexcept
+	{
+		std::size_t WriteIndex = 0;
+		for (std::size_t ReadIndex = 0; ReadIndex < ActiveTimerCount; ++ReadIndex)
+		{
+			const FTimerHandle Handle = InsertionOrder[ReadIndex];
+			if (static_cast<std::size_t>(Handle.Index) >= MaxTimers)
+			{
+				continue;
+			}
+			const FTimerSlot& Slot = Slots[Handle.Index];
+			if (Slot.bActive && Slot.Generation == Handle.Generation)
+			{
+				InsertionOrder[WriteIndex] = Handle;
+				++WriteIndex;
+			}
+		}
+		for (std::size_t ClearIndex = WriteIndex; ClearIndex < ActiveTimerCount; ++ClearIndex)
+		{
+			InsertionOrder[ClearIndex] = {};
+		}
+		ActiveTimerCount = WriteIndex;
+	}
+
+	/** Compacts insertion order after a Cancel without changing any remaining slot identity. */
 	void RemoveInsertionOrderAt(const FTimerHandle RemovedHandle) noexcept
 	{
 		std::size_t OrderIndex = ActiveTimerCount;

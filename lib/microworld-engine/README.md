@@ -20,9 +20,13 @@ Current status and recorded evidence live in
   expire when the parent is reclaimed.
 - Caller-supplied monotonic milliseconds drive scheduling.
 - `TTimerManager<MaxTimers, InlineCallbackBytes>` schedules fixed-capacity
-  one-shot and looping timers from caller-supplied time. The application owns
-  the manager value, supplies every clock reading, and decides when Advance is
-  called relative to World dispatch.
+  one-shot and looping timers from caller-supplied time. Every other
+  `ETimerMode` value (including `None` and arbitrary casts) is rejected
+  transactionally as `InvalidMode`. The application owns the manager value,
+  supplies every clock reading, and decides when Advance is called relative to
+  World dispatch. `FTimerHandle` is a {slot index, generation} pair local to
+  the issuing manager; completed one-shots are cleared in place and removed in
+  a single stable post-dispatch compaction pass.
 - Lifecycle methods return `ERuntimeResult`; registration methods return
   `EEngineResult`; timer methods return `ETimerResult`.
 

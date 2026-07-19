@@ -29,8 +29,10 @@ MicroWorld never depends on these fixtures.
   Its public-API probe exercises fixed storage, explicit roots, weak expiry,
   and full collection without target hardware I/O.
 - The Engine ESP32-S3 environment composes Core, Memory, Object, and Engine.
-  Its probe exercises registration, lifecycle, tick, rooted retention, and
-  unrooted collection without target hardware I/O.
+  Its probe exercises registration, lifecycle, tick, rooted retention,
+  unrooted collection, and the bounded `TTimerManager` (schedule, caller-time
+  Advance, one-shot completion, stale-handle rejection) without target
+  hardware I/O.
 - The benchmark environment adds target-only measurement code around the same
   public scheduling API.
 - PlatformIO source filtering selects the native entry point; the ESP-IDF

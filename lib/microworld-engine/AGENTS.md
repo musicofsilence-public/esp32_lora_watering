@@ -29,8 +29,14 @@ adapters, or hardware APIs.
 - `TTimerManager` is a standalone value owned by the application. The
   application supplies every clock reading and decides when Advance is called
   relative to World dispatch. Timers hold no reference to `UWorld`, `AActor`, or
-  `UActorComponent`, and dispatch of one does not trigger the other.
-- Keep portable code bounded, allocation-free in steady state, single-pass, free
+  `UActorComponent`, and dispatch of one does not trigger the other. `Schedule`
+  accepts only `OneShot` and `Looping` modes; every other `ETimerMode` value is
+  rejected transactionally. `FTimerHandle` is a {slot index, generation} pair
+  local to the issuing manager. Completed one-shots are cleared in place during
+  dispatch and removed by a single stable post-dispatch compaction pass; `Cancel`
+  outside dispatch remains one bounded linear removal.
+- Keep portable code bounded, allocation-free in steady state, single-pass in
+  dispatch (one post-dispatch compaction, not one shift per fired timer), free
   of structural mutation during dispatch, and free of RTTI, exceptions, hidden
   clocks, threads, and SDK calls.
 
