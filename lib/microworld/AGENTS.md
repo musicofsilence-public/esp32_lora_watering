@@ -5,9 +5,11 @@ Inherits `../AGENTS.md`.
 ## Architecture
 
 Core is the released platform-neutral lifecycle and tick package. `FApplication`
-guards a consumer composition root, `TWorld<N>` registers Actors,
-`TActor<N>` registers Components, and `FTickFunction` owns bounded scheduling.
-Consumers own concrete objects; registration is non-owning and fixed-capacity.
+guards a consumer composition root, `FTickFunction` owns bounded per-object
+scheduling, and `FLifecycleGuard` with the `FTickable` contract expresses the
+forward-only begin/tick/end lifecycle. Consumers own concrete objects. Core
+retired its own World/Actor/Component model in the Phase 1 consolidation; the
+managed Engine package is the sole Actor model.
 
 Memory, Object, and Engine are adjacent packages above Core. Their current
 acceptance state and next milestone live only in `PROGRESS.md`; this guide owns

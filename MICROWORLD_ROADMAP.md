@@ -253,7 +253,7 @@ Frame order inside `TEngineHost::Tick(now)` (fixed, documented, tested):
 Goal: prove the current state builds and passes everywhere before changing it,
 and make this document the recognized plan.
 
-- [ ] **0.1 Record a green baseline.** Build and run host tests for all five
+- [x] **0.1 Record a green baseline.** Build and run host tests for all five
   packages. Fix nothing yet; if something fails, record it under the task as a
   note and create a `⛔ BLOCKED` marker only if a later task depends on it.
 
@@ -267,7 +267,51 @@ and make this document the recognized plan.
   ```
   **Done when:** all five test suites pass (or failures are recorded here as notes).
 
-- [ ] **0.2 Register this plan in governance docs.** Edit `AGENTS.md` (root)
+  **Baseline result — recorded 2026-07-20** (Windows 11; MinGW-w64 UCRT g++
+  16.1.0; CMake/CTest 4.0.2; Ninja 1.13.2; Python 3.11.9). CMake's default
+  generator on this host is multi-config `Visual Studio 17 2022`, which does not
+  satisfy the single-config `ctest --test-dir` form used above, so each configure
+  step was run with `-G Ninja -DCMAKE_CXX_COMPILER=g++` appended (plus a harmless,
+  ignored `-DCMAKE_C_COMPILER=gcc`) — single-config GCC 16, the strict-warnings
+  toolchain already documented in PROGRESS.md. Otherwise the Verify commands were
+  run unchanged.
+
+  | Package | Configure + build | Tests | Result |
+  | --- | --- | --- | --- |
+  | Core (`build/host-core`) | ok | 5/5 passed | ✅ |
+  | Memory (`build/host-mem`) | ok | 1/1 passed | ✅ |
+  | Object (`build/host-obj`) | ok | 1/1 passed | ✅ |
+  | Engine (`build/host-eng`) | **failed** | not reached | 🚫 |
+  | Net (`build/host-net`) | **failed** | not reached | 🚫 |
+
+  All five *production* libraries compile; only the two test executables fail to
+  build, both inside allocation-counter test support:
+
+  - **Engine + Net — `std::aligned_alloc` is not a member of `std`**
+    (`lib/microworld-engine/tests/EngineAllocationCounters.cpp:29`,
+    `lib/microworld-net/tests/NetAllocationCounters.cpp:29`). The `AllocateAligned`
+    helper has an MSVC branch (`_aligned_malloc`) and a POSIX branch
+    (`std::aligned_alloc`); MinGW-w64 UCRT takes the POSIX branch, but its
+    libstdc++ does not declare `std::aligned_alloc` (UCRT has no C11
+    `aligned_alloc`). Platform gap in test-support code, not production code.
+  - **Net — `-Werror=unused-variable` on `ReadDestination`**
+    (`lib/microworld-net/tests/NetAllocationTests.cpp:42`): declared but never
+    used; GCC 16.1.0 strict warnings reject it.
+
+  Not fixed — task 0.1 is record-only. PROGRESS.md evidence for Engine/Net cites
+  GCC/Clang + ASan/UBSan runs (consistent with Linux, where `std::aligned_alloc`
+  exists), so this is most likely a Windows/MinGW-only baseline gap.
+
+  ⛔ BLOCKED → **Engine portion RESOLVED 2026-07-20; Net portion still open.**
+  The Engine suite was fixed during the merged 1.2+1.3 step by broadening the
+  `AllocateAligned` guard in `EngineAllocationCounters.cpp` from `_MSC_VER` to
+  `_WIN32` (MinGW then uses `_aligned_malloc`); `build/host-eng` now builds and
+  passes here. The **Net** (`build/host-net`) suite still fails to build — same
+  `std::aligned_alloc` gap in `NetAllocationCounters.cpp`, plus one
+  `-Werror=unused-variable` in `NetAllocationTests.cpp` — and still blocks
+  **4.1–4.4** until fixed the same way in Phase 4.
+
+- [x] **0.2 Register this plan in governance docs.** Edit `AGENTS.md` (root)
   and `lib/AGENTS.md`: state that `MICROWORLD_ROADMAP.md` is the improvement
   plan and task tracker, and `lib/microworld/PROGRESS.md` remains the evidence
   record. One or two sentences each, no other changes.
@@ -276,7 +320,7 @@ and make this document the recognized plan.
 
 ---
 
-### Phase 1 — Consolidation: one Actor model ⬜
+### Phase 1 — Consolidation: one Actor model ✅
 
 Goal: remove the duplicate Core actor model so the Engine layer
 (`UWorld`/`AActor`/`UActorComponent`) is the **only** World/Actor/Component
@@ -286,7 +330,7 @@ API. Core shrinks to shared primitives: `Application.h`, `Lifecycle.h`,
 **Decision record (do not relitigate):** owner chose "retire Core model" on
 2026-07-20. Old code stays available in git history.
 
-- [ ] **1.1 Inventory dependents of the retired types.** Find every reference
+- [x] **1.1 Inventory dependents of the retired types.** Find every reference
   to `TWorld`, `TActor`, `FActorBase`, `FActorComponent`, `FNetwork` outside
   `lib/microworld/include/MicroWorld/{World,Actor,ActorComponent,Network}.h`
   and their `.cpp` files. Expect hits in: `lib/microworld/tests/`,
@@ -300,7 +344,58 @@ API. Core shrinks to shared primitives: `Application.h`, `Lifecycle.h`,
   ```
   **Done when:** the list of affected files is written under this task.
 
-- [ ] **1.2 Delete the retired headers and sources.** Remove
+  **Inventory — recorded 2026-07-20.** Verify grep run via `rg` (the repo hook
+  blocks `grep`; identical result). The Verify pattern's bare `FActorComponent`
+  also matches the Engine types `FActorComponentRegistry` /
+  `FActorComponentRegistryBase`, so its raw `-l` output over-reports engine files;
+  the list below uses word-boundary matching to isolate genuine retired-type
+  references (the same disambiguation task 1.3's own grep applies with `TWorld<` /
+  `FActorBase` / `MicroWorld::FNetwork`). Counts are matches per file.
+
+  *Retired type definitions* (the files task 1.2 deletes — not dependents), all
+  under `lib/microworld/`: `include/MicroWorld/World.h` (5), `Actor.h` (19),
+  `ActorComponent.h` (12), `Network.h` (7); `src/Actor.cpp` (13),
+  `ActorComponent.cpp` (7), `Network.cpp` (5). (No `World.h` `.cpp` — `TWorld` is
+  header-only.)
+
+  *Genuine dependents — Core package code (migrate or delete in task 1.3):*
+  - `lib/microworld/tests/WorldTests.cpp` (40) — delete
+  - `lib/microworld/tests/ApplicationNetworkTests.cpp` (18) — delete
+  - `lib/microworld/examples/HostLifecycle/Main.cpp` (8) — rewrite on Engine types, move to engine
+  - `lib/microworld/benchmarks/DispatchBenchmark.cpp` (15) — port to Engine or delete
+  - `lib/microworld/tests/consumer/src/NativeMain.cpp` (2) — retarget to Core primitives
+  - `lib/microworld/tests/consumer/src/Esp32Main.cpp` (2) — retarget to Core primitives
+  - `lib/microworld/tests/consumer/src/Esp32BenchmarkMain.cpp` (11) — retarget to Core primitives
+
+  *Docs referencing retired types by name (task 1.4 doc sweep; 1.2 covers the
+  README public-headers list):* `lib/microworld/README.md` (5), `CHANGELOG.md`
+  (1), `AGENTS.md` (2), `docs/UE5ConceptMap.md` (2), `docs/Style.md` (1),
+  `docs/ModulePackaging.md` (1), `docs/decisions/0001-modular-runtime.md` (1),
+  `benchmarks/Results/Host.md` (4). NB: task 1.4 explicitly names only README,
+  UE5ConceptMap, PROGRESS, ModulePackaging — the other four above also match and
+  fall under 1.4's "no doc references retired types as current API" bar.
+  (`PROGRESS.md` itself does **not** match — it names World/Actor/Component only
+  generically.)
+
+  *Engine package — stale doc-comment references only, NOT code dependencies
+  (no `#include`, no code use); refresh in task 1.4:*
+  - `lib/microworld-engine/include/MicroWorld/Engine/Actor.h:29-30` — comment
+    "…use FActorBase and TActor from <MicroWorld/Actor.h> instead."
+  - `lib/microworld-engine/include/MicroWorld/Engine/World.h:25` — comment
+    "…matching Core's non-managed TWorld dispatch."
+
+  *False positives — NOT retired-type dependents (match only
+  `FActorComponentRegistry` / `FWorldActorRegistry`; leave untouched):* engine
+  `EngineStorage.h`, `EngineRegistryView.h`, `src/Actor.cpp`, `src/World.cpp`,
+  `tests/EngineLifecycleTests.cpp`, `tests/EngineRegistrationTests.cpp`,
+  `tests/EngineGarbageCollectionTests.cpp`, and
+  `lib/microworld/tests/consumer/src/EngineConsumerProbe.h`.
+
+  *Build wiring* (filenames, not type refs — handled by 1.2/1.3):
+  `lib/microworld/CMakeLists.txt` lists the retired sources and the retired test
+  files. No genuine retired-type reference exists in the top-level `src/` app.
+
+- [x] **1.2 Delete the retired headers and sources.** Remove
   `lib/microworld/include/MicroWorld/World.h`, `Actor.h`, `ActorComponent.h`,
   `Network.h` and `lib/microworld/src/Actor.cpp`, `ActorComponent.cpp`,
   `Network.cpp`. Update `lib/microworld/CMakeLists.txt` target sources and the
@@ -308,7 +403,7 @@ API. Core shrinks to shared primitives: `Application.h`, `Lifecycle.h`,
 
   **Done when:** `cmake --build build/host-core` succeeds with the files gone.
 
-- [ ] **1.3 Migrate or delete dependent tests/examples/benchmarks.**
+- [x] **1.3 Migrate or delete dependent tests/examples/benchmarks.**
   - `lib/microworld/tests/WorldTests.cpp`, `ApplicationNetworkTests.cpp`:
     delete (their engine-level equivalents live in
     `lib/microworld-engine/tests/`). Keep `TickFunctionTests.cpp`.
@@ -329,7 +424,43 @@ API. Core shrinks to shared primitives: `Application.h`, `Lifecycle.h`,
   ```
   **Done when:** both suites pass and the grep finds nothing.
 
-- [ ] **1.4 Documentation sweep for the retirement.** Update
+  **Merge outcome (1.2 + 1.3 done together, 2026-07-20).** Per the owner's
+  decision in section 6, 1.2 and 1.3 were completed as one step so the Core build
+  goes green once. Done here (GCC 16.1.0 via Ninja):
+  - Deleted the 7 retired Core files, `tests/WorldTests.cpp`,
+    `tests/ApplicationNetworkTests.cpp`, and `benchmarks/DispatchBenchmark.cpp`
+    (dispatch is covered by the Engine suite).
+  - `HostLifecycle` example rewritten on `UWorld`/`AActor`/`UActorComponent` and
+    moved to `lib/microworld-engine/examples/HostLifecycle/Main.cpp`; wired into
+    the engine CMake with the strict no-exceptions/RTTI options. It builds and,
+    when run, prints the deterministic trace (component-before-actor begin;
+    sensor ticks at 0/100/200 with 50 and 175 correctly skipped; actor-before-
+    component end).
+  - Consumer probes (`NativeMain`, `Esp32Main`, `Esp32BenchmarkMain`) retargeted
+    to Core primitives (`FTickFunction`); the Core profile-map check still passes
+    (no Object/Engine/Net markers leak into the Core profile). Follow-up
+    (2026-07-20): the three shared their probe body into a new
+    `CoreConsumerProbe.h` (`RunCoreConsumerProbe()`), matching the
+    Memory/Object/Engine family convention — verified by a host GCC build+run of
+    the native probe (exit 0) and strict compile-checks of both ESP32 entry
+    points; the Xtensa `pio` build stays Phase 5's gate.
+  - Core `CMakeLists.txt` (library sources, tests, retired benchmark/example
+    targets) and the README public-headers list updated. Two stale Core-type
+    references in engine header doc-comments (`Engine/Actor.h`, `Engine/World.h`)
+    removed.
+  - **Blocker cleared for the Engine suite:** `EngineAllocationCounters.cpp`
+    `AllocateAligned` guard broadened `_MSC_VER` → `_WIN32` so MinGW builds.
+
+  Evidence: `build/host-core` 5/5 pass; `build/host-eng` 1/1 pass (+ example
+  builds and runs, exit 0); grep gate `rg "TWorld<|FActorBase|MicroWorld::FNetwork"`
+  over `lib/microworld` + `lib/microworld-engine` (.h/.cpp) returns no matches;
+  Core class-documentation checker passes (35 files). **Not verified this
+  session:** the ESP32 PlatformIO consumer builds (no `pio`/hardware here) —
+  those are Phase 5's gate; the retargeted probes are trivial Core-primitive
+  `app_main`s. Remaining in Phase 1: **1.4** (documentation sweep), which also
+  updates the README/UE5ConceptMap prose still describing the retired model.
+
+- [x] **1.4 Documentation sweep for the retirement.** Update
   `lib/microworld/README.md` (Core = primitives only),
   `lib/microworld/docs/UE5ConceptMap.md` (remove Core actor rows; Engine rows
   are the concept map), `lib/microworld/PROGRESS.md` (note the retirement and
@@ -344,6 +475,38 @@ API. Core shrinks to shared primitives: `Application.h`, `Lifecycle.h`,
   # (see lib/microworld/tools/AGENTS.md for the exact invocation per package).
   ```
   **Done when:** checkers pass; no doc references retired types as current API.
+
+  **Done 2026-07-20 (documentation sweep).** Updated for the retirement:
+  `README.md` (Core = lifecycle/tick primitives; the managed Actor model lives
+  in Engine), `docs/UE5ConceptMap.md` (dropped the Core `TWorld`/`TActor`/
+  `FActorComponent` rows so the managed Engine rows are the World/Actor/Component
+  concept map), `PROGRESS.md` (Core "Done" entry reworded to primitives + a
+  Phase 1 completion evidence row), `docs/ModulePackaging.md` and
+  `docs/decisions/0001-modular-runtime.md` (the deleted Core `FNetwork` boundary
+  reframed as retired, not current). Beyond the four named docs, the 1.1
+  inventory's remaining retired-type hits were handled to the same bar:
+  `AGENTS.md` (Core description → primitives), `docs/Style.md` (T-prefix example
+  `TWorld<4>` → `TStaticVector<uint32_t, 4>`), `CHANGELOG.md` (added a "Removed"
+  entry; the 0.1.0 release history left intact), and
+  `benchmarks/Results/Host.md` (a "Historical (retired model)" note over the
+  retired size/dispatch tables).
+
+  Evidence: `CheckClassDocumentation.py` passes (36 files literal / 27 strict);
+  `CheckDependencyBoundaries.py --self-test` and `--package Core=lib/microworld`
+  pass; a grep for `TWorld`/`TActor`/`FActorBase`/`FActorComponent`/`FNetwork`
+  over `lib/microworld/**/*.md` returns only retired/historical-framed hits — no
+  doc presents a retired type as current API. Improvement applied alongside: the
+  three Core consumer probes now share `CoreConsumerProbe.h` (host GCC build+run
+  of the native probe exits 0; both ESP32 entry points compile clean under strict
+  flags; Xtensa `pio` build stays Phase 5's gate).
+
+  ⚠️ **Pre-existing gap flagged (not a Phase 1 blocker; see section 6).** The
+  prescribed `CheckFolderAgents.py` run fails on `lib/microworld/docs/diagrams:
+  missing AGENTS.md`. That directory (roadmap / C4 diagrams) predates Phase 1 and
+  has no working-tree change from this task — the strict folder check was already
+  red. Whether a generated-diagram directory needs a local guide is a design
+  decision the plan does not cover; recorded as a proposed row in section 6 for
+  the owner.
 
 ---
 
@@ -776,6 +939,8 @@ platform-free (dependency checker must keep passing).
 | 2026-07-20 | Networking = simple channel messages with roles (no replication/RPC); transports: UDP first (host-testable), E32 LoRa second, ESP-NOW deferred | Owner |
 | 2026-07-20 | Components fixed at actor construction; no runtime component add/remove | Plan default |
 | 2026-07-20 | GC stays optional-but-default via TEngineHost budget; store+GC design kept as-is | Plan default |
+| 2026-07-20 | **Merge tasks 1.2 + 1.3 into one combined step** (delete the retired headers/sources *and* migrate/delete every retired-type dependent together), because 1.2's Done-when (green `build/host-core`) cannot hold while 1.3's dependents still `#include` the deleted headers. The Core build goes green once, at the end of the combined step. | Owner |
+| 2026-07-20 | **PROPOSED (awaiting owner):** `lib/microworld/docs/diagrams` has no `AGENTS.md`, so the prescribed `CheckFolderAgents.py` strict run fails. Pre-existing (predates Phase 1), unrelated to the retirement. Options: (a) add a short `docs/diagrams/AGENTS.md`, (b) add `--exclude diagrams` to the prescribed invocation, or (c) accept it as a generated-assets directory needing no guide (per `tools/AGENTS.md`, the folder check is "not a policy requiring every future package subdirectory to add a local guide"). | PROPOSED |
 
 Add a row here whenever a task forces a design choice not covered by this plan.
 
@@ -788,8 +953,8 @@ of its tasks starts, ✅ only when all its tasks are `[x]`.
 
 | Phase | Title | Tasks | Status |
 | --- | --- | --- | --- |
-| 0 | Baseline & governance | 0.1–0.2 | ⬜ |
-| 1 | Consolidation: one Actor model | 1.1–1.4 | ⬜ |
+| 0 | Baseline & governance | 0.1–0.2 | ✅ |
+| 1 | Consolidation: one Actor model | 1.1–1.4 | ✅ |
 | 2 | Runtime Spawn & Destroy | 2.1–2.4 | ⬜ |
 | 3 | Composition root & logging | 3.1–3.3 | ⬜ |
 | 4 | Networking with roles | 4.1–4.4 | ⬜ |

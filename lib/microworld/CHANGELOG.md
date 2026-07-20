@@ -23,6 +23,11 @@ Object/Engine leakage into the Core+Net profile. The next milestone is one
 ESP32-S3 example. Live state and exact evidence are recorded in
 [PROGRESS.md](PROGRESS.md).
 
+Removed the duplicate Core `TWorld`/`TActor`/`FActorComponent`/`FNetwork` actor
+model; the managed Engine (`UWorld`/`AActor`/`UActorComponent`) is now the sole
+World/Actor/Component API and Core is lifecycle/tick primitives only
+(`FApplication`, `FTickFunction`, `FLifecycleGuard`, `FTickable`).
+
 ## 0.1.0 - 2026-07-18
 
 Initial Core release:

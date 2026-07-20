@@ -24,7 +24,9 @@ works.
 
 The package-family mission and engineering boundaries live in
 `lib/AGENTS.md`. `lib/microworld/PROGRESS.md` is the sole live implementation
-status and next-milestone record.
+status and next-milestone record. `MICROWORLD_ROADMAP.md` (repository root) is
+the MicroWorld improvement plan and task tracker; `lib/microworld/PROGRESS.md`
+remains the evidence record its phases are proven against.
 
 The product is behaviorally inspired by the read-only project at
 `C:\Users\Public\Arduino\RadioRemoteController`:

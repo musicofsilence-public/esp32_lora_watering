@@ -34,9 +34,9 @@ Core <- Memory <- Net
 Net is an independent overlay above Memory: it never pulls Object or Engine, so
 an application can use byte I/O without the managed runtime. Consumers select
 only the packages they use. CMake links the named targets; local PlatformIO
-development uses one `symlink://` dependency per selected package. The released
-`FNetwork` remains a small Core lifecycle/tick boundary; it is not the Net
-package.
+development uses one `symlink://` dependency per selected package. Net is the
+only MicroWorld networking package; the small Core `FNetwork` lifecycle/tick
+boundary that predated it was retired in the Phase 1 consolidation.
 
 ## Verification
 

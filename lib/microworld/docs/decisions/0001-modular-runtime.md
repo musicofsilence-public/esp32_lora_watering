@@ -24,9 +24,10 @@ package, CMake target, and PlatformIO manifest; consumers select the packages
 they use. This follows PlatformIO's one-manifest source-selection model and
 avoids feature macros that change Core's source set.
 
-`FNetwork` remains the released Core lifecycle/tick boundary. It is not the
-later Net package. Application composition roots own concrete resources and
-adapters; no global runtime registry is introduced.
+The original release shipped `FNetwork` as a small Core lifecycle/tick boundary,
+distinct from the later Net package; the Phase 1 consolidation retired it, so Net
+is now the only MicroWorld networking package. Application composition roots own
+concrete resources and adapters; no global runtime registry is introduced.
 
 ## Consequences
 

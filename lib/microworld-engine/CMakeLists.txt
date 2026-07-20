@@ -126,3 +126,18 @@ if(MICROWORLD_ENGINE_BUILD_BENCHMARKS AND EXISTS "${MICROWORLD_ENGINE_BENCHMARK_
         "${MICROWORLD_ENGINE_BENCHMARK_SOURCE}"
     )
 endif()
+
+# The HostLifecycle example is the canonical managed "hello MicroWorld" demo,
+# rewritten on UWorld/AActor/UActorComponent when the Core actor model was
+# retired (see MICROWORLD_ROADMAP.md Phase 1).
+set(MICROWORLD_ENGINE_EXAMPLE_SOURCE
+    "${CMAKE_CURRENT_SOURCE_DIR}/examples/HostLifecycle/Main.cpp"
+)
+if(EXISTS "${MICROWORLD_ENGINE_EXAMPLE_SOURCE}")
+    add_executable(microworld_engine_host_lifecycle ${MICROWORLD_ENGINE_EXAMPLE_SOURCE})
+    target_link_libraries(microworld_engine_host_lifecycle PRIVATE MicroWorld::Engine)
+    microworld_engine_enable_strict_portable_options(microworld_engine_host_lifecycle)
+    microworld_engine_disable_exceptions_and_rtti(
+        "${MICROWORLD_ENGINE_EXAMPLE_SOURCE}"
+    )
+endif()

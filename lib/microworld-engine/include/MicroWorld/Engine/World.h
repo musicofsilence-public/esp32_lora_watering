@@ -22,7 +22,7 @@ class FReferenceCollector;
  * The application creates one UWorld (or a user-derived class) inside an
  * FObjectStore, registers zero or more AActor instances before BeginPlay, then
  * roots the world with one TStrongObjectPtr<UWorld>. UWorld traces its actors;
- * it does not tick on its own, matching Core's non-managed TWorld dispatch.
+ * it does not tick on its own.
  */
 class UWorld : public UObject
 {

@@ -9,31 +9,27 @@ Current development status is in [PROGRESS.md](PROGRESS.md).
 ## What Core provides
 
 - `FApplication` guards a consumer composition root.
-- `TWorld<N>` registers non-owning Actors; `TActor<N>` registers non-owning
-  Components.
-- Registration is fixed-capacity and closes at `BeginPlay`.
-- Begin and tick use registration order; shutdown uses reverse order.
-- Components begin and tick before their Actor; Actors end before Components.
+- `FTickFunction` owns bounded per-object scheduling: each object carries its
+  own tick configuration and enable flags.
 - Caller-supplied monotonic milliseconds drive scheduling. Late ticks run once,
   never in a catch-up burst.
-- Lifecycle, capacity, ownership, and time failures return `ERuntimeResult`.
+- `FLifecycleGuard` and the `FTickable` contract express a forward-only
+  begin/tick/end lifecycle without scattered boolean flags.
+- Lifecycle, capacity, and time failures return `ERuntimeResult`.
 
-Consumers own concrete objects. Declare Components before their Actor and
-Actors before their World so reverse destruction cannot leave a registered
-pointer dangling.
+Core is lifecycle and tick **primitives** only. The managed World / Actor /
+Component model lives in the Engine package (`UWorld` / `AActor` /
+`UActorComponent`); Core retired its own duplicate Actor model in the Phase 1
+consolidation. Consumers still own their concrete objects.
 
 ## Public headers
 
 - `MicroWorld/Application.h`
-- `MicroWorld/Actor.h`
-- `MicroWorld/ActorComponent.h`
 - `MicroWorld/Lifecycle.h`
-- `MicroWorld/Network.h`
 - `MicroWorld/TickFunction.h`
 - `MicroWorld/Tickable.h`
 - `MicroWorld/Time.h`
 - `MicroWorld/Version.h`
-- `MicroWorld/World.h`
 
 ## Build
 

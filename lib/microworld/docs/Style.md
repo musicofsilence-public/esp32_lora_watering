@@ -7,7 +7,7 @@ compatibility.
 |---|---|---|
 | Namespace | PascalCase product name | `MicroWorld` |
 | Non-UObject class/struct | `F` prefix | `FApplication` |
-| Class template | `T` prefix | `TWorld<4>` |
+| Class template | `T` prefix | `TStaticVector<uint32_t, 4>` |
 | Enum | `E` prefix and PascalCase values | `ERuntimeResult::Success` |
 | Scalar alias | No aggregate prefix; spell units | `TimePointMilliseconds` |
 | Boolean | `b` prefix | `bShouldTick` |

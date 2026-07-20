@@ -25,9 +25,6 @@ class UWorld;
  * The application creates AActor inside an FObjectStore, registers its
  * UActorComponent instances before BeginPlay, and attaches it to one UWorld;
  * the Actor traces its Components without making its weak World parent owning.
- * Applications that own pointer-stable objects themselves and need only
- * fixed-capacity lifecycle and tick dispatch use FActorBase and TActor from
- * <MicroWorld/Actor.h> instead.
  */
 class AActor : public UObject, private FTickable
 {

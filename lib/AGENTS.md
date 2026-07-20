@@ -16,6 +16,8 @@ MCUs; this is a product direction, not a claim that every target is supported.
 
 This is the durable mission. The active roadmap still implements the smallest
 usable milestone first and defers speculative systems until a real need exists.
+`MICROWORLD_ROADMAP.md` (repository root) is that improvement plan and task
+tracker; `lib/microworld/PROGRESS.md` remains the evidence record.
 
 ## Architecture
 

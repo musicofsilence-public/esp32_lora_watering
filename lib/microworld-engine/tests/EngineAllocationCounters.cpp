@@ -4,7 +4,7 @@
 #include <cstdlib>
 #include <new>
 
-#if defined(_MSC_VER)
+#if defined(_WIN32)
 #include <malloc.h>
 #endif
 
@@ -22,7 +22,7 @@ namespace
 /** Allocates one block with the requested C++17 over-alignment. */
 void* AllocateAligned(const std::size_t Size, const std::size_t Alignment) noexcept
 {
-#if defined(_MSC_VER)
+#if defined(_WIN32)
 	return _aligned_malloc(Size, Alignment);
 #else
 	const std::size_t RoundedSize = ((Size + Alignment - 1) / Alignment) * Alignment;
@@ -33,7 +33,7 @@ void* AllocateAligned(const std::size_t Size, const std::size_t Alignment) noexc
 /** Releases one block returned by AllocateAligned on the active host runtime. */
 void FreeAligned(void* const Allocation) noexcept
 {
-#if defined(_MSC_VER)
+#if defined(_WIN32)
 	_aligned_free(Allocation);
 #else
 	std::free(Allocation);

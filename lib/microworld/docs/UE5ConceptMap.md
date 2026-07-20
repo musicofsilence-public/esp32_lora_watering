@@ -6,8 +6,6 @@ editor, or asset compatible with UE.
 | Familiar concept | MicroWorld | State | Difference |
 | --- | --- | --- | --- |
 | Application root | `FApplication` | Core | Consumer owns and orders concrete services; no global engine |
-| World / Actor dispatch | `TWorld<N>` / `TActor<N>` | Core | Fixed-capacity, non-owning registrations |
-| Component | `FActorComponent` | Core | Consumer-owned, non-GC component |
 | Primary tick | `FTickFunction` | Core | Caller supplies time; no tick groups or catch-up bursts |
 | Managed object | `UObject`, handles, roots, GC | Object candidate | Fixed caller-owned storage and explicit tracing |
 | Managed World / Actor / Component | `UWorld`, `AActor`, `UActorComponent` | Engine candidate | Application roots World; World/Actor trace children; parent references are weak |

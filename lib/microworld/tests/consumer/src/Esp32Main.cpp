@@ -1,14 +1,15 @@
-#include <MicroWorld/Version.h>
-#include <MicroWorld/World.h>
+#include "CoreConsumerProbe.h"
 
-static_assert(MicroWorld::Version.Major == 0);
-static_assert(MicroWorld::Version.Minor == 1);
-static_assert(MicroWorld::Version.Patch == 0);
+namespace
+{
+
+/** Retains the compile probe outcome so optimization cannot erase representative public calls. */
+volatile int CoreConsumerProbeResult = -1;
+
+} // namespace
 
 /** Proves ESP-IDF can link the exact package without platform dependencies entering it. */
 extern "C" void app_main()
 {
-	MicroWorld::TWorld<1> ConsumerCompileProbe;
-	(void)ConsumerCompileProbe.BeginPlay(0);
-	(void)ConsumerCompileProbe.EndPlay();
+	CoreConsumerProbeResult = RunCoreConsumerProbe();
 }

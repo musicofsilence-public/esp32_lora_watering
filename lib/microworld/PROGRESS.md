@@ -27,8 +27,11 @@ or inspect the
 
 ## Done
 
-- Core: bounded non-owning World/Actor/Component registration, deterministic
-  lifecycle/tick scheduling, typed results, and caller-supplied time.
+- Core: deterministic lifecycle/tick scheduling primitives (`FApplication`,
+  `FTickFunction`, `FLifecycleGuard`, `FTickable`), typed results, and
+  caller-supplied time. The duplicate Core World/Actor/Component/Network model
+  was retired in the Phase 1 consolidation so the managed Engine is the sole
+  Actor model (see the Engine entry below).
 - Memory: explicit resources, fixed storage, ownership helpers, containers,
   and delegates.
 - Object: generation-safe handles, descriptors, roots, fixed object storage,
@@ -78,6 +81,8 @@ real application needs them.
 | Engine ESP32 image | 20,332 / 327,680 bytes RAM (6.2%); 208,061 / 4,194,304 bytes flash (5.0%) | Compile-only complete-image evidence; +184 bytes flash from prior timer image |
 | Simple Net | 52 byte/loopback/manager behavior cases including invalid-backing-span safety, valid empty `{nullptr, 0}` reader reporting an empty suffix view without pointer arithmetic, host-loopback null-destination-before-empty-queue `Invalid` rejection with sentinel-verified transactional outputs, private caller-owned `FNetPacketStorage` observed only through the matching `FNetManager` specialization, normalized ENetResult semantics, recorded-packet FIFO order with differently sized and valued packets, exact head retention across driver Full/Unavailable/Invalid, recovery sending the retained head before later packets, caller-storage reuse across wraparound, transactional receive failures, and steady-state zero-allocation; strict Core+Memory+Net consumer built with exceptions and RTTI disabled exited 0; Net TU compiled clean under strict GCC 16 and Clang 19 warnings; dependency/profile checkers updated and self-tested | Accepted implementation candidate; target runtime margins unmeasured |
 | Net ESP32 image | 20,156 / 327,680 bytes RAM (6.2%); 196,773 / 4,194,304 bytes flash (4.7%) | Corrected-source compile-only complete-image evidence; clean retry passed after an earlier transient GCC 15.2.0 ICE in ESP-IDF vendor code |
+| Roadmap Phase 0 baseline (host, 2026-07-20) | Windows MinGW-w64 UCRT g++ 16.1.0 via Ninja: Core 5/5, Memory 1/1, and Object 1/1 CTest suites pass; Engine and Net test executables fail to build (MinGW-UCRT libstdc++ has no `std::aligned_alloc`; one `-Werror=unused-variable`), while all five production libraries compile | Baseline recorded per MICROWORLD_ROADMAP.md task 0.1; root and lib `AGENTS.md` now register the roadmap as plan/tracker (task 0.2). The Engine/Net test-support portability gap is tracked in the roadmap as a downstream blocker for Phases 2 and 4; no fix attempted (baseline is record-only) |
+| Roadmap Phase 1 consolidation (host, 2026-07-20) | Retired the duplicate Core actor model (`TWorld`/`TActor`/`FActorComponent`/`FNetwork`); the managed Engine `UWorld`/`AActor`/`UActorComponent` is the sole Actor model. GCC 16.1.0 via Ninja: `host-core` 5/5 and `host-eng` 1/1 CTest pass; the managed `HostLifecycle` example builds under `-fno-exceptions -fno-rtti` and prints its deterministic trace (exit 0); grep for `TWorld<`/`FActorBase`/`MicroWorld::FNetwork` over Core+Engine finds nothing; class-documentation (36 files) and Core dependency-boundary checkers pass; the retirement doc sweep leaves no doc presenting a retired type as current API. Core consumer probes retargeted to primitives and consolidated behind `CoreConsumerProbe.h` | Roadmap Phase 1 complete (tasks 1.1–1.4, per MICROWORLD_ROADMAP.md). Engine test-support `std::aligned_alloc` gap fixed for MinGW; the Net test-support copy remains a Phase 4 blocker. Strict `CheckFolderAgents.py` flags a pre-existing `docs/diagrams` guide gap unrelated to the retirement (roadmap section 6, proposed). ESP32 PlatformIO consumer builds not re-run here (Phase 5 gate) |
 
 No target upload, runtime timing, stack, heap, radio, or physical-hardware
 claim has been recorded for Memory, Object, Engine, or Net.

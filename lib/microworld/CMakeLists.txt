@@ -3,14 +3,12 @@ cmake_minimum_required(VERSION 3.16)
 project(MicroWorld VERSION 0.1.0 LANGUAGES CXX)
 
 option(MICROWORLD_BUILD_TESTS "Build MicroWorld host tests" ON)
-option(MICROWORLD_BUILD_BENCHMARKS "Build MicroWorld host benchmarks" ON)
-option(MICROWORLD_BUILD_EXAMPLES "Build MicroWorld examples" ON)
 
+# Core is now primitives only: lifecycle, tick, application. The World/Actor/
+# Component and Network sources were retired in favor of the managed Engine
+# layer (see MICROWORLD_ROADMAP.md Phase 1).
 set(MICROWORLD_CORE_SOURCES
     src/Application.cpp
-    src/Actor.cpp
-    src/ActorComponent.cpp
-    src/Network.cpp
     src/TickFunction.cpp
 )
 
@@ -52,8 +50,6 @@ if(MICROWORLD_BUILD_TESTS)
     add_executable(microworld_tests
         tests/TestMain.cpp
         tests/TickFunctionTests.cpp
-        tests/WorldTests.cpp
-        tests/ApplicationNetworkTests.cpp
     )
     target_link_libraries(microworld_tests PRIVATE MicroWorld::Core)
     microworld_enable_strict_warnings(microworld_tests)
@@ -116,23 +112,7 @@ if(MICROWORLD_BUILD_TESTS)
     )
 endif()
 
-if(MICROWORLD_BUILD_BENCHMARKS)
-    add_executable(microworld_dispatch_benchmark
-        benchmarks/DispatchBenchmark.cpp
-    )
-    target_link_libraries(
-        microworld_dispatch_benchmark
-        PRIVATE MicroWorld::Core
-    )
-    microworld_enable_strict_warnings(microworld_dispatch_benchmark)
-endif()
-
-if(MICROWORLD_BUILD_EXAMPLES)
-    add_executable(microworld_host_lifecycle
-        examples/HostLifecycle/Main.cpp
-    )
-    # Keep one in-tree consumer on the released raw target name as a
-    # compatibility probe while new consumers use MicroWorld::Core.
-    target_link_libraries(microworld_host_lifecycle PRIVATE microworld)
-    microworld_enable_strict_warnings(microworld_host_lifecycle)
-endif()
+# The dispatch benchmark and HostLifecycle example were retired with the Core
+# actor model. Dispatch is now covered by microworld-engine; the HostLifecycle
+# example was rewritten on the managed types and moved to microworld-engine
+# (see MICROWORLD_ROADMAP.md Phase 1).
