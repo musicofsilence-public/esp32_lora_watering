@@ -31,7 +31,7 @@ locality documented).
 | Standalone Engine consumer | Built with `/W4 /WX /EHs-c- /GR-` and exited 0 |
 | Four-package dependency check | Passed across 42 files |
 | Engine class-documentation check | Passed across 18 files (`--require-doxygen --max-sentences 3`) |
-| Managed profile map (host consumer) | Passed at 69,294 bytes |
+| Managed profile map (host consumer) | Passed |
 
 ## Corrected timer behavior
 
@@ -70,40 +70,52 @@ zero scalar, array, or aligned global allocations across the whole sequence.
 
 ## Exact verification commands
 
+Run every command below from the repository root in PowerShell. All build
+outputs are placed under `%TEMP%` so verification does not create repository
+artifacts.
+
 ### Release tests (Core, Memory, Object, Engine)
 
-```text
-cmake -S lib/microworld -B <core-build> -DMICROWORLD_BUILD_TESTS=ON -DMICROWORLD_BUILD_BENCHMARKS=OFF -DMICROWORLD_BUILD_EXAMPLES=OFF
-cmake --build <core-build> --config Release
-ctest --test-dir <core-build> -C Release --output-on-failure
+```powershell
+$EvidenceRoot = Join-Path $env:TEMP 'microworld-engine-host-evidence-52055fc'
+$CoreBuild = Join-Path $EvidenceRoot 'core'
+$MemoryBuild = Join-Path $EvidenceRoot 'memory'
+$ObjectBuild = Join-Path $EvidenceRoot 'object'
+$EngineBuild = Join-Path $EvidenceRoot 'engine'
 
-cmake -S lib/microworld-memory -B <memory-build> -DMICROWORLD_MEMORY_BUILD_TESTS=ON -DMICROWORLD_MEMORY_BUILD_BENCHMARKS=OFF
-cmake --build <memory-build> --config Release
-ctest --test-dir <memory-build> -C Release --output-on-failure
+cmake -S lib/microworld -B $CoreBuild -DMICROWORLD_BUILD_TESTS=ON -DMICROWORLD_BUILD_BENCHMARKS=OFF -DMICROWORLD_BUILD_EXAMPLES=OFF
+cmake --build $CoreBuild --config Release
+ctest --test-dir $CoreBuild -C Release --output-on-failure
 
-cmake -S lib/microworld-object -B <object-build> -DMICROWORLD_OBJECT_BUILD_TESTS=ON -DMICROWORLD_OBJECT_BUILD_BENCHMARKS=OFF
-cmake --build <object-build> --config Release
-ctest --test-dir <object-build> -C Release --output-on-failure
+cmake -S lib/microworld-memory -B $MemoryBuild -DMICROWORLD_MEMORY_BUILD_TESTS=ON -DMICROWORLD_MEMORY_BUILD_BENCHMARKS=OFF
+cmake --build $MemoryBuild --config Release
+ctest --test-dir $MemoryBuild -C Release --output-on-failure
 
-cmake -S lib/microworld-engine -B <engine-build> -DMICROWORLD_ENGINE_BUILD_TESTS=ON -DMICROWORLD_ENGINE_BUILD_BENCHMARKS=OFF
-cmake --build <engine-build> --config Release
-ctest --test-dir <engine-build> -C Release --output-on-failure
-<engine-build>/Release/microworld_engine_tests.exe
+cmake -S lib/microworld-object -B $ObjectBuild -DMICROWORLD_OBJECT_BUILD_TESTS=ON -DMICROWORLD_OBJECT_BUILD_BENCHMARKS=OFF
+cmake --build $ObjectBuild --config Release
+ctest --test-dir $ObjectBuild -C Release --output-on-failure
+
+cmake -S lib/microworld-engine -B $EngineBuild -DMICROWORLD_ENGINE_BUILD_TESTS=ON -DMICROWORLD_ENGINE_BUILD_BENCHMARKS=OFF
+cmake --build $EngineBuild --config Release
+ctest --test-dir $EngineBuild -C Release --output-on-failure
+& (Join-Path $EngineBuild 'Release\microworld_engine_tests.exe')
 ```
 
 ### Strict GCC 16.1.0 timer-TU compile
 
-```text
-C:\Users\chorn\AppData\Local\Microsoft\WinGet\Packages\BrechtSanders.WinLibs.POSIX.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe\mingw64\bin\g++.exe \
-  -std=c++17 -O2 -Wall -Wextra -Wpedantic -Werror -fno-exceptions -fno-rtti \
-  -I lib/microworld/include \
-  -I lib/microworld-memory/include \
-  -I lib/microworld-object/include \
-  -I lib/microworld-engine/include \
-  -I lib/microworld/tests \
-  -I lib/microworld-engine/tests \
-  -c lib/microworld-engine/tests/EngineTimerManagerTests.cpp \
-  -o EngineTimerManagerTests.gcc.obj
+```powershell
+$Gcc = 'C:\Users\chorn\AppData\Local\Microsoft\WinGet\Packages\BrechtSanders.WinLibs.POSIX.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe\mingw64\bin\g++.exe'
+$GccObject = Join-Path $EvidenceRoot 'EngineTimerManagerTests.gcc.obj'
+& $Gcc `
+  -std=c++17 -O2 -Wall -Wextra -Wpedantic -Werror -fno-exceptions -fno-rtti `
+  -I lib/microworld/include `
+  -I lib/microworld-memory/include `
+  -I lib/microworld-object/include `
+  -I lib/microworld-engine/include `
+  -I lib/microworld/tests `
+  -I lib/microworld-engine/tests `
+  -c lib/microworld-engine/tests/EngineTimerManagerTests.cpp `
+  -o $GccObject
 ```
 
 Result: exit 0, no warnings.
@@ -116,54 +128,57 @@ demands Clang 20+ and would reject any C++ TU including `<cstdint>` with
 `error STL1000`, independent of source. The compile uses `-nostdinc++` plus the
 VS 2022 STL include path:
 
-```text
-"C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\Llvm\x64\bin\clang++.exe" \
-  -std=c++17 -O2 -Wall -Wextra -Wpedantic -Werror -fno-exceptions -fno-rtti \
-  -nostdinc++ \
-  -isystem "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.44.35207\include" \
-  -I lib/microworld/include \
-  -I lib/microworld-memory/include \
-  -I lib/microworld-object/include \
-  -I lib/microworld-engine/include \
-  -I lib/microworld/tests \
-  -I lib/microworld-engine/tests \
-  -c lib/microworld-engine/tests/EngineTimerManagerTests.cpp \
-  -o EngineTimerManagerTests.clang.obj
+```powershell
+$Clang = 'C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\Llvm\x64\bin\clang++.exe'
+$MsvcStl = 'C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.44.35207\include'
+$ClangObject = Join-Path $EvidenceRoot 'EngineTimerManagerTests.clang.obj'
+& $Clang `
+  -std=c++17 -O2 -Wall -Wextra -Wpedantic -Werror -fno-exceptions -fno-rtti `
+  -nostdinc++ `
+  -isystem $MsvcStl `
+  -I lib/microworld/include `
+  -I lib/microworld-memory/include `
+  -I lib/microworld-object/include `
+  -I lib/microworld-engine/include `
+  -I lib/microworld/tests `
+  -I lib/microworld-engine/tests `
+  -c lib/microworld-engine/tests/EngineTimerManagerTests.cpp `
+  -o $ClangObject
 ```
 
 Result: exit 0, no warnings.
 
 ### Strict standalone Engine consumer
 
-```text
-cmake -S lib/microworld/tests/consumer -B <consumer-build> -DMICROWORLD_STANDALONE_ENGINE_CONSUMER=ON
-cmake --build <consumer-build> --config Release
-<consumer-build>/Release/microworld_engine_consumer.exe
+```powershell
+$ConsumerBuild = Join-Path $EvidenceRoot 'consumer'
+cmake -S lib/microworld/tests/consumer -B $ConsumerBuild -DMICROWORLD_STANDALONE_ENGINE_CONSUMER=ON
+cmake --build $ConsumerBuild --config Release
+& (Join-Path $ConsumerBuild 'Release\microworld_engine_consumer.exe')
 ```
 
 Result: exit 0.
 
 ### Static checks
 
-```text
-python lib/microworld/tools/CheckDependencyBoundaries.py ^
-  --package Core=lib/microworld ^
-  --package Memory=lib/microworld-memory ^
-  --package Object=lib/microworld-object ^
-  --package Engine=lib/microworld-engine ^
+```powershell
+python lib/microworld/tools/CheckDependencyBoundaries.py `
+  --package Core=lib/microworld `
+  --package Memory=lib/microworld-memory `
+  --package Object=lib/microworld-object `
+  --package Engine=lib/microworld-engine `
   --exclude build --exclude .pio --exclude __pycache__
 
-python lib/microworld/tools/CheckClassDocumentation.py ^
-  --root lib/microworld-engine --exclude build --exclude .pio ^
+python lib/microworld/tools/CheckClassDocumentation.py `
+  --root lib/microworld-engine --exclude build --exclude .pio `
   --exclude __pycache__ --require-doxygen --max-sentences 3
 
-python lib/microworld/tools/CheckProfileMap.py ^
-  --map <consumer-build>/microworld_engine_profile.map --profile Managed
+$ConsumerMap = Join-Path $ConsumerBuild 'microworld_engine_profile.map'
+python lib/microworld/tools/CheckProfileMap.py --map $ConsumerMap --profile Managed
 ```
 
 Results: dependency-boundary check passed (4 packages, 42 files);
-class-documentation check passed (18 files); Managed profile map check passed
-(69,294 bytes).
+class-documentation check passed (18 files); Managed profile map check passed.
 
 Host behavior and compile evidence do not establish target runtime timing,
 stack, heap, power, or physical-hardware behavior. No firmware upload, run, or

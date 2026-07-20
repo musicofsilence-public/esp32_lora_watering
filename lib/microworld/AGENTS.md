@@ -9,9 +9,9 @@ guards a consumer composition root, `TWorld<N>` registers Actors,
 `TActor<N>` registers Components, and `FTickFunction` owns bounded scheduling.
 Consumers own concrete objects; registration is non-owning and fixed-capacity.
 
-Memory, Object, and Engine are adjacent packages above Core. The minimal
-managed Engine is an accepted implementation candidate; simple fixed-capacity
-Engine timers are next, not a broader framework.
+Memory, Object, and Engine are adjacent packages above Core. Their current
+acceptance state and next milestone live only in `PROGRESS.md`; this guide owns
+durable Core boundaries rather than volatile roadmap sequencing.
 
 ## Concepts
 
