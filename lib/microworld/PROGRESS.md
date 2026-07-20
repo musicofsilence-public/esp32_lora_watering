@@ -5,15 +5,16 @@ behavior; benchmark records contain measured facts.
 
 ## Current state
 
-MicroWorld remains a small, bounded runtime. The minimal managed Engine has
-passed its acceptance checks; target runtime margins remain unmeasured.
+MicroWorld remains a small, bounded runtime. The minimal managed Engine and
+the Simple Timers milestone are accepted implementation candidates; target
+runtime margins remain unmeasured.
 
 | Package | State |
 | --- | --- |
 | Core | Released 0.1 lifecycle and tick package |
 | Memory | Implemented candidate; target runtime margins unmeasured |
 | Object / GC | Implemented candidate; target runtime margins unmeasured |
-| Engine (incl. bounded timers) | Implemented candidate; target runtime margins unmeasured |
+| Engine (incl. bounded timers) | Accepted implementation candidate; target runtime margins unmeasured |
 | Net | Next milestone |
 
 ## Visual roadmap
@@ -39,7 +40,8 @@ or inspect the
   caller-supplied time, generation-checked handles local to the issuing
   manager, one-shot and looping scheduling (every other mode rejected
   transactionally), deterministic insertion-order dispatch with single-pass
-  post-dispatch compaction, cancellation, no catch-up bursts, and no
+  post-dispatch compaction that preserves multiple survivors and appends
+  reused slots at the logical tail, cancellation, no catch-up bursts, and no
   observable steady-state allocation.
 
 ## Next
@@ -60,8 +62,8 @@ One ESP32-S3 example remains a later milestone.
 | Memory | 27 cases, including paired Clang 20 ASan/UBSan | Candidate evidence; target margins unmeasured |
 | Object | 26 cases under MSVC Release, strict GCC 16, and paired Clang 20 ASan/UBSan | Candidate evidence; target margins unmeasured |
 | Object ESP32 image | 20,172 bytes RAM and 198,877 bytes flash | Compile-only complete-image evidence |
-| Minimal Engine | 21 lifecycle/registration/GC cases; four-package dependency check passed across 42 files | Accepted candidate evidence; target runtime margins unmeasured |
-| Simple Timers | 33 timer behavior cases; corrected mode rejection, single-pass Advance compaction, and steady-state zero-allocation dispatch; strict Engine consumer built with exceptions and RTTI disabled exited 0; timer TU compiled clean under strict GCC 16 warnings | Accepted candidate evidence; target runtime margins unmeasured |
+| Minimal Engine | 21 lifecycle/registration/GC cases; four-package dependency check passed across 42 files | Accepted implementation candidate; target runtime margins unmeasured |
+| Simple Timers | 34 timer behavior cases including mixed stable compaction and tail reuse; explicit mode allowlist, single-pass Advance compaction, and steady-state zero-allocation dispatch; strict Engine consumer built with exceptions and RTTI disabled exited 0; timer TU compiled clean under strict GCC 16 and Clang 19 warnings | Accepted implementation candidate; target runtime margins unmeasured |
 | Engine ESP32 image | 20,332 / 327,680 bytes RAM (6.2%); 208,061 / 4,194,304 bytes flash (5.0%) | Compile-only complete-image evidence; +184 bytes flash from prior timer image |
 
 No target upload, runtime timing, stack, heap, radio, or physical-hardware

@@ -2,12 +2,14 @@
 
 ## Unreleased
 
-Memory, Object, and the minimal managed Engine are implemented adjacent
-candidates. The bounded `TTimerManager` fixed-capacity timer facility is an
-accepted Engine candidate after correction: explicit mode allowlist, single-
-pass post-dispatch compaction, redundant destructor removed, and handle
-locality documented. The next milestone is Simple Net. Live state and exact
-evidence are recorded in [PROGRESS.md](PROGRESS.md).
+Memory and Object are implemented candidates; the minimal managed Engine and
+the Simple Timers milestone are accepted implementation candidates. The bounded
+`TTimerManager` fixed-capacity timer facility passed its final mixed
+stable-compaction regression (34 timer cases, 55 total Engine cases): explicit
+mode allowlist, single-pass post-dispatch compaction preserving multiple
+survivors and appending reused slots at the logical tail, redundant destructor
+removed, and handle locality documented. The next milestone is Simple Net.
+Live state and exact evidence are recorded in [PROGRESS.md](PROGRESS.md).
 
 ## 0.1.0 - 2026-07-18
 

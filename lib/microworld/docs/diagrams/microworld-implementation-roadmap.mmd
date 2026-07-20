@@ -24,8 +24,8 @@ flowchart TB
         CORE["<b>1 · Core</b><br/><small><b>RELEASED 0.1</b><br/>Lifecycle · tick · typed results<br/>31 cases + 5 CTest checks</small>"]
         MEMORY["<b>2 · Memory</b><br/><small><b>IMPLEMENTED CANDIDATE</b><br/>Fixed storage · smart pointers<br/>containers · delegates · 27 cases</small>"]
         OBJECT["<b>3 · Object / GC</b><br/><small><b>IMPLEMENTED CANDIDATE</b><br/>UObject · handles · roots<br/>bounded incremental GC · 26 cases</small>"]
-        ENGINE["<b>4 · Minimal Engine</b><br/><small><b>ACCEPTED CANDIDATE</b><br/>UWorld · AActor · UActorComponent<br/>21 lifecycle/registration/GC cases</small>"]
-        TIMERS["<b>5 · Simple Timers</b><br/><small><b>ACCEPTED CANDIDATE</b><br/>Fixed capacity · mode allowlist<br/>single-pass compaction · 33 cases</small>"]
+        ENGINE["<b>4 · Minimal Engine</b><br/><small><b>ACCEPTED IMPLEMENTATION CANDIDATE</b><br/>UWorld · AActor · UActorComponent<br/>21 lifecycle/registration/GC cases</small>"]
+        TIMERS["<b>5 · Simple Timers</b><br/><small><b>ACCEPTED IMPLEMENTATION CANDIDATE</b><br/>Fixed capacity · mode allowlist<br/>single-pass compaction · 34 cases</small>"]
 
         CORE --> MEMORY --> OBJECT --> ENGINE --> TIMERS
     end
