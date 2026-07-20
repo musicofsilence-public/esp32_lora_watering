@@ -240,7 +240,7 @@ Frame order inside `TEngineHost::Tick(now)` (fixed, documented, tested):
 1. `NetHost.PumpReceive(now)` — drain driver, dispatch messages, update peers
 2. `Timers.Advance(now)` — fire due timer callbacks
 3. `World.Advance(now)` — components tick, then actors
-4. `World.ApplyDeferred(now)` — pending spawns begin play; pending destroys end play + release
+4. `World.ApplyPending(now)` — pending spawns begin play; pending destroys end play + release
 5. GC slice — `RequestCollection()` when idle (policy: every tick), then `Advance(Budget)`
 6. `NetHost.PumpSend(now)` — flush outbound FIFO, heartbeats
 
@@ -529,7 +529,7 @@ point per frame, never in the middle of dispatch.
   `DispatchEndPlay`, is removed from the registry (order of survivors
   preserved), and `MarkPendingDestroy` is called on the store so GC reclaims
   it. Its components are ended with it (reverse order) and marked for destroy.
-- The barrier is `UWorld::ApplyDeferred(TimePointMilliseconds Now)`, called by
+- The barrier is `UWorld::ApplyPending(TimePointMilliseconds Now)`, called by
   the application (or `TEngineHost` in Phase 3) **after** `Advance` each frame.
   Order at the barrier: destroys first, then spawns (frees capacity first).
 - Registration before `BeginPlay` keeps working exactly as today.
@@ -546,7 +546,7 @@ EEngineResult SpawnActor(TObjectPtr<AActor> Actor) noexcept;
 EEngineResult DestroyActor(TObjectPtr<AActor> Actor) noexcept;
 
 /** Applies pending destroys (first) then pending spawns; call once per frame after Advance. */
-ERuntimeResult ApplyDeferred(TimePointMilliseconds NowMilliseconds) noexcept;
+ERuntimeResult ApplyPending(TimePointMilliseconds NowMilliseconds) noexcept;
 
 /** Report pending structural work so tests and budget policy can observe it. */
 std::size_t PendingSpawnCount() const noexcept;
@@ -592,7 +592,7 @@ std::size_t PendingDestroyCount() const noexcept;
   Note for 2.2/consumers: the lease (and therefore `UWorld`) grew by four
   pointers — object-store slots must still fit `UWorld`.
 
-- [x] **2.2 Implement SpawnActor/DestroyActor/ApplyDeferred on UWorld.** In
+- [x] **2.2 Implement SpawnActor/DestroyActor/ApplyPending on UWorld.** In
   `Engine/World.h` + `src/World.cpp` per the design above. Validation reuses
   the same checks as `RegisterActor` (duplicate, capacity incl. pending,
   cross-store, invalid reference, already-owned, already-pending). All
@@ -609,7 +609,7 @@ std::size_t PendingDestroyCount() const noexcept;
   literal "mark components inside `AActor::DispatchEndPlay`" is infeasible: the
   store rejects `MarkPendingDestroy` while a dispatch guard is held, and
   `DispatchEndPlay` is shared with non-destroying world `EndPlay`. Resolved by
-  keeping `DispatchEndPlay` a pure end-cascade and making `ApplyDeferred`
+  keeping `DispatchEndPlay` a pure end-cascade and making `ApplyPending`
   two-phase: (1) end the doomed actors under the dispatch guard; (2) after
   releasing it, mark each actor's components (new `UWorld`-friend
   `AActor::MarkRegisteredComponentsPendingDestroy`) and the actor itself
@@ -970,7 +970,7 @@ platform-free (dependency checker must keep passing).
 | 2026-07-20 | GC stays optional-but-default via TEngineHost budget; store+GC design kept as-is | Plan default |
 | 2026-07-20 | **Merge tasks 1.2 + 1.3 into one combined step** (delete the retired headers/sources *and* migrate/delete every retired-type dependent together), because 1.2's Done-when (green `build/host-core`) cannot hold while 1.3's dependents still `#include` the deleted headers. The Core build goes green once, at the end of the combined step. | Owner |
 | 2026-07-20 | **PROPOSED (awaiting owner):** `lib/microworld/docs/diagrams` has no `AGENTS.md`, so the prescribed `CheckFolderAgents.py` strict run fails. Pre-existing (predates Phase 1), unrelated to the retirement. Options: (a) add a short `docs/diagrams/AGENTS.md`, (b) add `--exclude diagrams` to the prescribed invocation, or (c) accept it as a generated-assets directory needing no guide (per `tools/AGENTS.md`, the folder check is "not a policy requiring every future package subdirectory to add a local guide"). | PROPOSED |
-| 2026-07-21 | Phase 2.2 marking of a destroyed actor's components: the store blocks `MarkPendingDestroy` under the dispatch guard `DispatchEndPlay` runs within, and that method is shared with non-destroying world `EndPlay`. Chose **option A** (simplest that works): keep `DispatchEndPlay` pure; `ApplyDeferred` ends doomed actors under the guard, then marks their components + the actor for destroy after releasing it (new `UWorld`-friend `AActor` helper). Option B (unguarded destroy cascade + a "being destroyed" flag) rejected — it loses reentrancy protection. | Owner |
+| 2026-07-21 | Phase 2.2 marking of a destroyed actor's components: the store blocks `MarkPendingDestroy` under the dispatch guard `DispatchEndPlay` runs within, and that method is shared with non-destroying world `EndPlay`. Chose **option A** (simplest that works): keep `DispatchEndPlay` pure; `ApplyPending` ends doomed actors under the guard, then marks their components + the actor for destroy after releasing it (new `UWorld`-friend `AActor` helper). Option B (unguarded destroy cascade + a "being destroyed" flag) rejected — it loses reentrancy protection. | Owner |
 
 Add a row here whenever a task forces a design choice not covered by this plan.
 

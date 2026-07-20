@@ -93,7 +93,7 @@ public:
 	 * after Advance so structural change happens only at this barrier. Returns the
 	 * first end or begin failure while still applying every queued change.
 	 */
-	ERuntimeResult ApplyDeferred(TimePointMilliseconds NowMilliseconds) noexcept;
+	ERuntimeResult ApplyPending(TimePointMilliseconds NowMilliseconds) noexcept;
 
 	/** Reports how many actors are queued to begin at the next barrier. */
 	std::size_t PendingSpawnCount() const noexcept;

@@ -238,7 +238,7 @@ ERuntimeResult UWorld::DispatchActorEnd(AActor& Actor) noexcept
 EEngineResult UWorld::SpawnActor(const TObjectPtr<AActor> Actor) noexcept
 {
 	// Deferred spawn is a play-time structural request; it only queues here and
-	// the actual registration and begin happen at the next ApplyDeferred barrier.
+	// the actual registration and begin happen at the next ApplyPending barrier.
 	if (Lifecycle.State() != ELifecycleState::Playing)
 	{
 		return EEngineResult::LifecycleLocked;
@@ -340,7 +340,7 @@ EEngineResult UWorld::DestroyActor(const TObjectPtr<AActor> Actor) noexcept
 	return EEngineResult::Success;
 }
 
-ERuntimeResult UWorld::ApplyDeferred(const TimePointMilliseconds NowMilliseconds) noexcept
+ERuntimeResult UWorld::ApplyPending(const TimePointMilliseconds NowMilliseconds) noexcept
 {
 	const ERuntimeResult PlayingResult = Lifecycle.RequirePlaying();
 	if (PlayingResult != ERuntimeResult::Success)
