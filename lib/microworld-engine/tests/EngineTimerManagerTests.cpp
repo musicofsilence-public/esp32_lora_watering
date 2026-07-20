@@ -661,6 +661,66 @@ MW_TEST_CASE(EngineTimerFullCapacitySameDeadlineStableOrderAndReuse)
 	MW_EXPECT_EQ(Test, 0u, Manager.TimerCount(), "The reused one-shot must be removed after firing");
 }
 
+/**
+ * Proves post-dispatch compaction preserves multiple looping survivors around a removed one-shot,
+ * and that slot reuse does not restore physical slot order.
+ *
+ * Schedule order is Looping A, OneShot B, Looping C. The single post-dispatch compaction must
+ * keep A and C in their relative order while dropping B, and a replacement D scheduled into B's
+ * freed physical slot must dispatch at the logical insertion tail (A, C, D), not between A and C.
+ */
+MW_TEST_CASE(EngineTimerMixedStableCompactionPreservesSurvivorsAndTailReuse)
+{
+	FDispatchOrderRecorder Recorder;
+	FTestManager Manager{0};
+	FTimerHandle HandleA{};
+	FTimerHandle HandleB{};
+	FTimerHandle HandleC{};
+
+	MW_EXPECT_SUCCESS(Test, Manager.Schedule(MakeOrderCallback(Recorder, 1), 100, ETimerMode::Looping, HandleA), "Looping A should schedule");
+	MW_EXPECT_SUCCESS(Test, Manager.Schedule(MakeOrderCallback(Recorder, 2), 100, ETimerMode::OneShot, HandleB), "OneShot B should schedule");
+	MW_EXPECT_SUCCESS(Test, Manager.Schedule(MakeOrderCallback(Recorder, 3), 100, ETimerMode::Looping, HandleC), "Looping C should schedule");
+	MW_EXPECT_EQ(Test, 3u, Manager.TimerCount(), "A, B, and C should occupy three slots");
+
+	const std::uint16_t SlotIndexOfB = HandleB.Index;
+
+	// All three share the deadline 100; the single Advance fires them in insertion order A, B, C.
+	MW_EXPECT_SUCCESS(Test, Manager.Advance(100), "First Advance at the shared deadline should succeed");
+	MW_EXPECT_EQ(Test, std::size_t{3}, Recorder.Count, "All three due timers should fire on the first Advance");
+	MW_EXPECT_EQ(Test, 1, Recorder.Identities[0], "Looping A should fire first");
+	MW_EXPECT_EQ(Test, 2, Recorder.Identities[1], "OneShot B should fire second");
+	MW_EXPECT_EQ(Test, 3, Recorder.Identities[2], "Looping C should fire third");
+
+	// The one-shot B was cleared in place and dropped by post-dispatch compaction; the two loopers survive.
+	MW_EXPECT_EQ(Test, 2u, Manager.TimerCount(), "Only the two looping survivors A and C should remain after B completes");
+
+	// B's published handle is now stale: its slot generation advanced when it was cleared.
+	MW_EXPECT_EQ(Test, ETimerResult::StaleHandle, Manager.Cancel(HandleB), "The completed one-shot B handle must be stale");
+
+	// Schedule replacement D. It must reuse B's freed physical slot (lowest free index) but append
+	// at the logical insertion tail, not restore B's original position between A and C.
+	FTimerHandle HandleD{};
+	MW_EXPECT_SUCCESS(Test, Manager.Schedule(MakeOrderCallback(Recorder, 4), 100, ETimerMode::OneShot, HandleD), "Replacement D should schedule");
+	MW_EXPECT_EQ(Test, SlotIndexOfB, HandleD.Index, "D must reuse B's freed physical slot");
+	MW_EXPECT_TRUE(Test, HandleD.Generation != HandleB.Generation, "D must publish a fresh generation distinct from B's retired handle");
+	MW_EXPECT_EQ(Test, 3u, Manager.TimerCount(), "A, C, and D should occupy three slots after reuse");
+
+	// At Now=200 the loopers A and C refire (their Now-derived deadline is 100+100=200), and D's
+	// one-shot deadline is 100+100=200 as well. Stable order must be A, C, D, proving that compaction
+	// preserved A and C and that D dispatches at the tail rather than in B's old slot position.
+	MW_EXPECT_SUCCESS(Test, Manager.Advance(200), "Second Advance at the shared deadline should succeed");
+	MW_EXPECT_EQ(Test, std::size_t{6}, Recorder.Count, "A, C, and D should all fire on the second Advance");
+	MW_EXPECT_EQ(Test, 1, Recorder.Identities[3], "Looping A should fire first again after compaction");
+	MW_EXPECT_EQ(Test, 3, Recorder.Identities[4], "Looping C should retain its position ahead of the reused slot");
+	MW_EXPECT_EQ(Test, 4, Recorder.Identities[5], "The reused-slot replacement D should dispatch at the insertion tail");
+
+	// Only the two loopers remain after the second Advance; D completed and was removed.
+	MW_EXPECT_EQ(Test, 2u, Manager.TimerCount(), "Only the two looping survivors A and C should remain after D completes");
+
+	// D's handle is now stale for the same reason B's was.
+	MW_EXPECT_EQ(Test, ETimerResult::StaleHandle, Manager.Cancel(HandleD), "The completed replacement D handle must be stale");
+}
+
 // ---------------------------------------------------------------------------
 // Category 8: Mutation rules during dispatch
 // ---------------------------------------------------------------------------

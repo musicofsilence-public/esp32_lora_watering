@@ -128,13 +128,15 @@ public:
 	TTimerManager& operator=(const TTimerManager&) = delete;
 
 	/**
-	 * Prevents moving: the manager is an application-owned standalone value and handles
-	 * are {index, generation} pairs local to one issuing manager. Moving would silently
-	 * invalidate external outstanding handles without changing their stored values.
+	 * Prevents moving so the manager keeps one deliberately simple application-owned
+	 * lifetime and identity. Handles are plain {index, generation} pairs local to one
+	 * issuing manager; relocation would not mechanically rewrite them, and forbidding
+	 * move keeps the ownership boundary explicit instead of relying on the caller to
+	 * avoid carrying a handle across a relocated manager.
 	 */
 	TTimerManager(TTimerManager&&) = delete;
 
-	/** Prevents move assignment for the same handle-validity reason as the deleted move ctor. */
+	/** Prevents move assignment for the same application-owned lifetime/identity reason as the deleted move ctor. */
 	TTimerManager& operator=(TTimerManager&&) = delete;
 
 	/**
@@ -261,8 +263,9 @@ public:
 				continue;
 			}
 
-			// Execute is noexcept and succeeds for every active slot because Reset is reached
-			// only through removal paths that this dispatch lock blocks for caller mutations.
+			// Dispatch is locked for the whole Advance, so no caller Schedule, Cancel, or nested
+			// Advance can cancel this slot, replace its callback, or reschedule it while the
+			// active bound callback executes. Execute is noexcept and the bound callable is live.
 			(void)Slot.Callback.Execute();
 
 			if (Slot.Mode == ETimerMode::OneShot)
