@@ -101,7 +101,8 @@ public:
 			return {};
 		}
 		bLeaseIssued = true;
-		return FWorldActorRegistryBase{Actors.data(), MaxActors, Count};
+		return FWorldActorRegistryBase{
+			Actors.data(), MaxActors, Count, PendingSpawn.data(), PendingSpawnCount, PendingDestroy.data(), PendingDestroyCount};
 	}
 
 	/** Prevents a view from outliving a temporary registry owner. */
@@ -119,6 +120,18 @@ private:
 
 	/** Records the number of entries published only through the owning world. */
 	std::size_t Count{0};
+
+	/** Holds actors queued for begin at the next deferred barrier. */
+	std::array<TObjectPtr<AActor>, MaxActors> PendingSpawn{};
+
+	/** Records the number of queued-spawn entries advanced only by the owning world. */
+	std::size_t PendingSpawnCount{0};
+
+	/** Holds registered actors queued for end and release at the next deferred barrier. */
+	std::array<TObjectPtr<AActor>, MaxActors> PendingDestroy{};
+
+	/** Records the number of queued-destroy entries advanced only by the owning world. */
+	std::size_t PendingDestroyCount{0};
 
 	/** Ensures this storage cannot be shared or rebound to a second world. */
 	bool bLeaseIssued{false};

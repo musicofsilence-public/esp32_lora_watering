@@ -510,7 +510,7 @@ API. Core shrinks to shared primitives: `Application.h`, `Lifecycle.h`,
 
 ---
 
-### Phase 2 — Runtime Spawn & Destroy ⬜
+### Phase 2 — Runtime Spawn & Destroy 🟨
 
 Goal: a UE5 developer can spawn and destroy actors while the world is playing.
 Bounded, deterministic, deferred: structural changes apply only at one barrier
@@ -567,7 +567,7 @@ std::size_t PendingDestroyCount() const noexcept;
 | live + pendingSpawn == MaxActors | `CapacityExceeded` | — |
 | All checks pass | `Success` (queued) | `Success` (queued) |
 
-- [ ] **2.1 Extend registry storage for pending lists.** In
+- [x] **2.1 Extend registry storage for pending lists.** In
   `lib/microworld-engine/include/MicroWorld/Engine/EngineStorage.h` and
   `EngineRegistryView.h`: give `FWorldActorRegistry<MaxActors>` two extra
   fixed arrays (`PendingSpawn`, `PendingDestroy`, each `MaxActors` slots with
@@ -577,6 +577,20 @@ std::size_t PendingDestroyCount() const noexcept;
 
   **Done when:** engine package still builds; new lease operations have doc
   comments; no public API leaks mutable storage.
+
+  **Done 2026-07-20.** `FWorldActorRegistry<MaxActors>`
+  ([EngineStorage.h](lib/microworld-engine/include/MicroWorld/Engine/EngineStorage.h))
+  gained `PendingSpawn`/`PendingDestroy` fixed arrays (each `MaxActors`) with
+  counts, passed into the lease via `MakeView`. The lease
+  ([EngineRegistryView.h](lib/microworld-engine/include/MicroWorld/Engine/EngineRegistryView.h))
+  gained `RemoveAt(Index)` (stable left-shift of the live array, vacated tail
+  slot cleared) plus symmetric private `Get*Count`/`*At`/`Add*`/`Clear*`
+  accessors for both pending lists; `IsValid` now also bounds the pending
+  counts. All new members/methods are private (`friend UWorld`), doc-commented,
+  and nothing is called yet (task 2.2 uses them). Evidence: `host-eng` builds
+  clean under strict warnings and CTest passes 1/1; the example still links.
+  Note for 2.2/consumers: the lease (and therefore `UWorld`) grew by four
+  pointers — object-store slots must still fit `UWorld`.
 
 - [ ] **2.2 Implement SpawnActor/DestroyActor/ApplyDeferred on UWorld.** In
   `Engine/World.h` + `src/World.cpp` per the design above. Validation reuses
@@ -955,7 +969,7 @@ of its tasks starts, ✅ only when all its tasks are `[x]`.
 | --- | --- | --- | --- |
 | 0 | Baseline & governance | 0.1–0.2 | ✅ |
 | 1 | Consolidation: one Actor model | 1.1–1.4 | ✅ |
-| 2 | Runtime Spawn & Destroy | 2.1–2.4 | ⬜ |
+| 2 | Runtime Spawn & Destroy | 2.1–2.4 | 🟨 |
 | 3 | Composition root & logging | 3.1–3.3 | ⬜ |
 | 4 | Networking with roles | 4.1–4.4 | ⬜ |
 | 5 | Platform adapters | 5.1–5.3 | ⬜ |
