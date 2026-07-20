@@ -235,13 +235,229 @@ ERuntimeResult UWorld::DispatchActorEnd(AActor& Actor) noexcept
 	return Actor.DispatchEndPlay();
 }
 
+EEngineResult UWorld::SpawnActor(const TObjectPtr<AActor> Actor) noexcept
+{
+	// Deferred spawn is a play-time structural request; it only queues here and
+	// the actual registration and begin happen at the next ApplyDeferred barrier.
+	if (Lifecycle.State() != ELifecycleState::Playing)
+	{
+		return EEngineResult::LifecycleLocked;
+	}
+	FObjectStore* const ObjectStore = GetObjectStore();
+	if (ObjectStore == nullptr)
+	{
+		return EEngineResult::InvalidReference;
+	}
+	AActor* const Resolved = Actor.Get();
+	if (Resolved == nullptr)
+	{
+		return EEngineResult::InvalidReference;
+	}
+	if (!Actor.BelongsTo(*ObjectStore))
+	{
+		return EEngineResult::CrossStore;
+	}
+	if (!Actors.IsValid())
+	{
+		return EEngineResult::CapacityExceeded;
+	}
+	// A duplicate is any actor already live or already queued to spawn.
+	for (std::size_t Index = 0; Index < Actors.GetCount(); ++Index)
+	{
+		if (Actors.At(Index).Handle() == Actor.Handle())
+		{
+			return EEngineResult::Duplicate;
+		}
+	}
+	for (std::size_t Index = 0; Index < Actors.GetPendingSpawnCount(); ++Index)
+	{
+		if (Actors.PendingSpawnAt(Index).Handle() == Actor.Handle())
+		{
+			return EEngineResult::Duplicate;
+		}
+	}
+	// Capacity counts live and pending-spawn actors together so a queued spawn can
+	// never exceed the world's fixed registry once the barrier applies it.
+	if (Actors.GetCount() + Actors.GetPendingSpawnCount() >= Actors.GetCapacity())
+	{
+		return EEngineResult::CapacityExceeded;
+	}
+	if (Resolved->HasAssignedWorld())
+	{
+		return EEngineResult::AlreadyOwned;
+	}
+
+	// World identity is bound at the barrier, not here, so a repeated request is
+	// caught as a pending-spawn duplicate rather than as an already-owned actor.
+	Actors.AddPendingSpawn(Actor);
+	return EEngineResult::Success;
+}
+
+EEngineResult UWorld::DestroyActor(const TObjectPtr<AActor> Actor) noexcept
+{
+	if (Lifecycle.State() != ELifecycleState::Playing)
+	{
+		return EEngineResult::LifecycleLocked;
+	}
+	FObjectStore* const ObjectStore = GetObjectStore();
+	if (ObjectStore == nullptr)
+	{
+		return EEngineResult::InvalidReference;
+	}
+	if (Actor.Get() == nullptr)
+	{
+		return EEngineResult::InvalidReference;
+	}
+	if (!Actor.BelongsTo(*ObjectStore))
+	{
+		return EEngineResult::CrossStore;
+	}
+	// Only an actor currently registered with this world can be destroyed; a
+	// pending-spawn actor is not yet registered and is rejected as invalid.
+	bool bRegistered = false;
+	for (std::size_t Index = 0; Index < Actors.GetCount(); ++Index)
+	{
+		if (Actors.At(Index).Handle() == Actor.Handle())
+		{
+			bRegistered = true;
+			break;
+		}
+	}
+	if (!bRegistered)
+	{
+		return EEngineResult::InvalidReference;
+	}
+	// A repeated destroy of the same actor before the barrier applies is a duplicate.
+	for (std::size_t Index = 0; Index < Actors.GetPendingDestroyCount(); ++Index)
+	{
+		if (Actors.PendingDestroyAt(Index).Handle() == Actor.Handle())
+		{
+			return EEngineResult::Duplicate;
+		}
+	}
+
+	Actors.AddPendingDestroy(Actor);
+	return EEngineResult::Success;
+}
+
+ERuntimeResult UWorld::ApplyDeferred(const TimePointMilliseconds NowMilliseconds) noexcept
+{
+	const ERuntimeResult PlayingResult = Lifecycle.RequirePlaying();
+	if (PlayingResult != ERuntimeResult::Success)
+	{
+		return PlayingResult;
+	}
+	FObjectStore* const ObjectStore = GetObjectStore();
+	if (ObjectStore == nullptr)
+	{
+		return ERuntimeResult::InvalidLifecycle;
+	}
+	if (Actors.GetPendingDestroyCount() == 0 && Actors.GetPendingSpawnCount() == 0)
+	{
+		return ERuntimeResult::Success;
+	}
+
+	ERuntimeResult FirstError = ERuntimeResult::Success;
+
+	// Destroys apply before spawns so ending actors free capacity first. The end
+	// cascade runs under the dispatch guard; store destruction marking waits until
+	// the guard releases because MarkPendingDestroy is rejected while dispatch is
+	// locked.
+	{
+		FObjectStoreDispatchGuard DispatchGuard(*ObjectStore);
+		if (!DispatchGuard.IsAcquired())
+		{
+			return ERuntimeResult::LifecycleLocked;
+		}
+		for (std::size_t Index = 0; Index < Actors.GetPendingDestroyCount(); ++Index)
+		{
+			if (AActor* const Actor = Actors.PendingDestroyAt(Index).Get())
+			{
+				const ERuntimeResult EndResult = DispatchActorEnd(*Actor);
+				if (FirstError == ERuntimeResult::Success && EndResult != ERuntimeResult::Success)
+				{
+					FirstError = EndResult;
+				}
+			}
+		}
+	}
+
+	// Now that no dispatch guard is held, mark each doomed actor's components and
+	// then the actor itself for the destruction barrier, and unregister it from
+	// the live set while preserving the order of the survivors.
+	for (std::size_t Index = 0; Index < Actors.GetPendingDestroyCount(); ++Index)
+	{
+		const TObjectPtr<AActor> DoomedActor = Actors.PendingDestroyAt(Index);
+		AActor* const Actor = DoomedActor.Get();
+		if (Actor == nullptr)
+		{
+			continue;
+		}
+		Actor->MarkRegisteredComponentsPendingDestroy();
+		for (std::size_t LiveIndex = 0; LiveIndex < Actors.GetCount(); ++LiveIndex)
+		{
+			if (Actors.At(LiveIndex).Handle() == DoomedActor.Handle())
+			{
+				Actors.RemoveAt(LiveIndex);
+				break;
+			}
+		}
+		(void)ObjectStore->MarkPendingDestroy(DoomedActor.Handle());
+	}
+	Actors.ClearPendingDestroy();
+
+	// Spawns register into the freed live capacity and begin under a fresh guard.
+	{
+		FObjectStoreDispatchGuard DispatchGuard(*ObjectStore);
+		if (!DispatchGuard.IsAcquired())
+		{
+			return ERuntimeResult::LifecycleLocked;
+		}
+		for (std::size_t Index = 0; Index < Actors.GetPendingSpawnCount(); ++Index)
+		{
+			const TObjectPtr<AActor> SpawnedActor = Actors.PendingSpawnAt(Index);
+			AActor* const Actor = SpawnedActor.Get();
+			if (Actor == nullptr)
+			{
+				continue;
+			}
+			Actor->AssignWorld(GetObjectHandle());
+			Actors.Add(SpawnedActor);
+			const ERuntimeResult BeginResult = DispatchActorBegin(*Actor, NowMilliseconds);
+			if (FirstError == ERuntimeResult::Success && BeginResult != ERuntimeResult::Success)
+			{
+				FirstError = BeginResult;
+			}
+		}
+	}
+	Actors.ClearPendingSpawn();
+
+	return FirstError;
+}
+
+std::size_t UWorld::PendingSpawnCount() const noexcept
+{
+	return Actors.GetPendingSpawnCount();
+}
+
+std::size_t UWorld::PendingDestroyCount() const noexcept
+{
+	return Actors.GetPendingDestroyCount();
+}
+
 void UWorld::VisitReferences(FReferenceCollector& Collector) noexcept
 {
-	// Every registered actor is a traced downward edge; the world owns no other
-	// managed references.
+	// Every registered actor is a traced downward edge. Pending-spawn actors are
+	// also reachable so they survive collection until the barrier begins them;
+	// pending-destroy actors are still in the live set until the barrier removes
+	// them, so they need no separate edge here.
 	for (std::size_t Index = 0; Index < Actors.GetCount(); ++Index)
 	{
 		Collector.AddReferencedObject(Actors.At(Index));
+	}
+	for (std::size_t Index = 0; Index < Actors.GetPendingSpawnCount(); ++Index)
+	{
+		Collector.AddReferencedObject(Actors.PendingSpawnAt(Index));
 	}
 }
 

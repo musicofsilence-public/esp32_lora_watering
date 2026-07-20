@@ -213,6 +213,22 @@ void AActor::AssignWorld(const FObjectHandle World) noexcept
 	WorldObjectHandle = World;
 }
 
+void AActor::MarkRegisteredComponentsPendingDestroy() noexcept
+{
+	FObjectStore* const ObjectStore = GetObjectStore();
+	if (ObjectStore == nullptr)
+	{
+		return;
+	}
+	// Components have already ended (reverse order in DispatchEndPlay); marking
+	// each one queues it for the same destruction barrier as its owning actor.
+	// The caller invokes this outside any dispatch guard so the store accepts it.
+	for (std::size_t Index = 0; Index < Components.GetCount(); ++Index)
+	{
+		(void)ObjectStore->MarkPendingDestroy(Components.At(Index).Handle());
+	}
+}
+
 void AActor::VisitReferences(FReferenceCollector& Collector) noexcept
 {
 	// Every registered component is a traced downward edge; the weak world link

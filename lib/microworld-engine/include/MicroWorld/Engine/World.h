@@ -8,6 +8,8 @@
 #include <MicroWorld/Object/ObjectPtr.h>
 #include <MicroWorld/Time.h>
 
+#include <cstddef>
+
 namespace MicroWorld
 {
 
@@ -65,6 +67,39 @@ public:
 
 	/** Ends every registered actor in reverse registration order; idempotent after success. */
 	ERuntimeResult EndPlay() noexcept;
+
+	/**
+	 * Queues one constructed, same-store, unowned actor to begin at the next
+	 * barrier while the world is playing.
+	 *
+	 * Rejects a non-playing world, empty/stale/cross-store references, actors
+	 * already registered or already pending-spawn, actors owned by another world,
+	 * and exhausted live-plus-pending capacity, all transactionally.
+	 */
+	EEngineResult SpawnActor(TObjectPtr<AActor> Actor) noexcept;
+
+	/**
+	 * Queues one actor registered with this world to end and release at the next
+	 * barrier while the world is playing.
+	 *
+	 * Rejects a non-playing world, empty/stale/cross-store references, actors not
+	 * registered with this world, and actors already pending-destroy, all
+	 * transactionally.
+	 */
+	EEngineResult DestroyActor(TObjectPtr<AActor> Actor) noexcept;
+
+	/**
+	 * Applies pending destroys first, then pending spawns; call once per frame
+	 * after Advance so structural change happens only at this barrier. Returns the
+	 * first end or begin failure while still applying every queued change.
+	 */
+	ERuntimeResult ApplyDeferred(TimePointMilliseconds NowMilliseconds) noexcept;
+
+	/** Reports how many actors are queued to begin at the next barrier. */
+	std::size_t PendingSpawnCount() const noexcept;
+
+	/** Reports how many actors are queued to end and release at the next barrier. */
+	std::size_t PendingDestroyCount() const noexcept;
 
 private:
 	/** Begins one actor's lifecycle while letting the world roll back on failure. */

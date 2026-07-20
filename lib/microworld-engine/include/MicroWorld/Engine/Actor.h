@@ -110,6 +110,9 @@ private:
 	/** Binds one weak world handle after same-store registration validation. */
 	void AssignWorld(FObjectHandle World) noexcept;
 
+	/** Marks every registered component for the store destruction barrier after end. */
+	void MarkRegisteredComponentsPendingDestroy() noexcept;
+
 	/** Reports whether registration into a new owner is still permitted. */
 	bool IsRegistrationOpen() const noexcept { return Lifecycle.State() == ELifecycleState::Constructed; }
 

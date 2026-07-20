@@ -592,7 +592,7 @@ std::size_t PendingDestroyCount() const noexcept;
   Note for 2.2/consumers: the lease (and therefore `UWorld`) grew by four
   pointers — object-store slots must still fit `UWorld`.
 
-- [ ] **2.2 Implement SpawnActor/DestroyActor/ApplyDeferred on UWorld.** In
+- [x] **2.2 Implement SpawnActor/DestroyActor/ApplyDeferred on UWorld.** In
   `Engine/World.h` + `src/World.cpp` per the design above. Validation reuses
   the same checks as `RegisterActor` (duplicate, capacity incl. pending,
   cross-store, invalid reference, already-owned, already-pending). All
@@ -604,6 +604,21 @@ std::size_t PendingDestroyCount() const noexcept;
   **Done when:** compiles clean under the package's strict warnings; every new
   method documented; `AActor::DispatchEndPlay` path also marks the actor's
   registered components `MarkPendingDestroy` after their `EndPlay` ran.
+
+  **Done 2026-07-21 (option A, owner chose "simplest solution").** The plan's
+  literal "mark components inside `AActor::DispatchEndPlay`" is infeasible: the
+  store rejects `MarkPendingDestroy` while a dispatch guard is held, and
+  `DispatchEndPlay` is shared with non-destroying world `EndPlay`. Resolved by
+  keeping `DispatchEndPlay` a pure end-cascade and making `ApplyDeferred`
+  two-phase: (1) end the doomed actors under the dispatch guard; (2) after
+  releasing it, mark each actor's components (new `UWorld`-friend
+  `AActor::MarkRegisteredComponentsPendingDestroy`) and the actor itself
+  `MarkPendingDestroy`, then `RemoveAt` from the live set (survivor order
+  preserved); (3) register + begin pending spawns under a fresh guard.
+  `SpawnActor`/`DestroyActor` validate per the table (queue-only; world identity
+  bound at the barrier). `VisitReferences` now also traces pending-spawn actors.
+  Evidence: `host-eng` builds clean under strict warnings and CTest passes 1/1
+  (no regression). Spawn/destroy behavior is exercised by task 2.3's tests.
 
 - [ ] **2.3 Tests for spawn/destroy.** New
   `lib/microworld-engine/tests/EngineSpawnDestroyTests.cpp` covering at
@@ -955,6 +970,7 @@ platform-free (dependency checker must keep passing).
 | 2026-07-20 | GC stays optional-but-default via TEngineHost budget; store+GC design kept as-is | Plan default |
 | 2026-07-20 | **Merge tasks 1.2 + 1.3 into one combined step** (delete the retired headers/sources *and* migrate/delete every retired-type dependent together), because 1.2's Done-when (green `build/host-core`) cannot hold while 1.3's dependents still `#include` the deleted headers. The Core build goes green once, at the end of the combined step. | Owner |
 | 2026-07-20 | **PROPOSED (awaiting owner):** `lib/microworld/docs/diagrams` has no `AGENTS.md`, so the prescribed `CheckFolderAgents.py` strict run fails. Pre-existing (predates Phase 1), unrelated to the retirement. Options: (a) add a short `docs/diagrams/AGENTS.md`, (b) add `--exclude diagrams` to the prescribed invocation, or (c) accept it as a generated-assets directory needing no guide (per `tools/AGENTS.md`, the folder check is "not a policy requiring every future package subdirectory to add a local guide"). | PROPOSED |
+| 2026-07-21 | Phase 2.2 marking of a destroyed actor's components: the store blocks `MarkPendingDestroy` under the dispatch guard `DispatchEndPlay` runs within, and that method is shared with non-destroying world `EndPlay`. Chose **option A** (simplest that works): keep `DispatchEndPlay` pure; `ApplyDeferred` ends doomed actors under the guard, then marks their components + the actor for destroy after releasing it (new `UWorld`-friend `AActor` helper). Option B (unguarded destroy cascade + a "being destroyed" flag) rejected — it loses reentrancy protection. | Owner |
 
 Add a row here whenever a task forces a design choice not covered by this plan.
 
