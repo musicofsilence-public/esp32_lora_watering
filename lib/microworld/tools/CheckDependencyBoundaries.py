@@ -11,21 +11,14 @@ from pathlib import Path
 
 
 # Each module may include itself plus only these inward portable dependencies.
+# Serialization and Integration are intentionally absent: those packages do not
+# exist and predeclaring them would authorize package paths that are not built.
 MODULE_DEPENDENCIES = {
     "Core": set(),
     "Memory": {"Core"},
     "Object": {"Core", "Memory"},
     "Engine": {"Core", "Memory", "Object"},
-    "Serialization": {"Core"},
-    "Net": {"Core", "Memory", "Serialization"},
-    "Integration": {
-        "Core",
-        "Memory",
-        "Object",
-        "Engine",
-        "Serialization",
-        "Net",
-    },
+    "Net": {"Core", "Memory"},
 }
 
 # Platform-facing APIs are intentionally absent: portable packages may use only
@@ -303,9 +296,11 @@ def run_self_test() -> int:
         root = Path(temporary_directory)
         core = root / "core"
         memory = root / "memory"
+        net = root / "net"
         (core / "include" / "MicroWorld" / "Net").mkdir(parents=True)
         (memory / "include" / "MicroWorld" / "Memory").mkdir(parents=True)
         (memory / "include" / "MicroWorld" / "Containers").mkdir(parents=True)
+        (net / "include" / "MicroWorld" / "Net").mkdir(parents=True)
 
         (core / "include" / "MicroWorld" / "Good.h").write_text(
             "#include <cstdint>\n",
@@ -339,15 +334,32 @@ def run_self_test() -> int:
             "#include <MicroWorld/Time.h>\n",
             encoding="utf-8",
         )
+        # A valid Net header may reach Core and Memory but nothing above it.
+        (net / "include" / "MicroWorld" / "Net" / "Good.h").write_text(
+            "#include <MicroWorld/Time.h>\n"
+            "#include <MicroWorld/Containers/Span.h>\n",
+            encoding="utf-8",
+        )
+        # Net must not depend on Object or Engine; both directions must fail.
+        (net / "include" / "MicroWorld" / "Net" / "ObjectLeak.h").write_text(
+            "#include <MicroWorld/Object/Object.h>\n",
+            encoding="utf-8",
+        )
+        (net / "include" / "MicroWorld" / "Net" / "EngineLeak.h").write_text(
+            "#include <MicroWorld/Engine/World.h>\n",
+            encoding="utf-8",
+        )
 
         errors, _ = analyze_packages(
-            [("Core", core), ("Memory", memory)],
+            [("Core", core), ("Memory", memory), ("Net", net)],
             {"build", ".pio", "__pycache__"},
         )
         expected_fragments = (
             "external header esp_log.h",
             "Core package contains a Net module path",
             "Memory must not depend on Object",
+            "Net must not depend on Object",
+            "Net must not depend on Engine",
         )
         missing_fragments = [
             fragment

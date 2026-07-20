@@ -18,7 +18,7 @@ inspect the
 | Memory | `MicroWorld::Memory` | `MicroWorldMemory` | Implemented candidate |
 | Object | `MicroWorld::Object` | `MicroWorldObject` | Implemented candidate |
 | Engine | `MicroWorld::Engine` | `MicroWorldEngine` | Implemented candidate |
-| Net | `MicroWorld::Net` | `MicroWorldNet` | Not created; later milestone |
+| Net | `MicroWorld::Net` | `MicroWorldNet` | Implemented candidate |
 
 PlatformIO selects a library's source set through its manifest. It does not use
 one manifest to select different source sets for different consumers, so each
@@ -31,10 +31,12 @@ Core <- Memory <- Object <- Engine
 Core <- Memory <- Net
 ```
 
-Consumers select only the packages they use. CMake links the named targets;
-local PlatformIO development uses one `symlink://` dependency per selected
-package. The released `FNetwork` remains a small Core lifecycle/tick boundary;
-it is not the later Net package.
+Net is an independent overlay above Memory: it never pulls Object or Engine, so
+an application can use byte I/O without the managed runtime. Consumers select
+only the packages they use. CMake links the named targets; local PlatformIO
+development uses one `symlink://` dependency per selected package. The released
+`FNetwork` remains a small Core lifecycle/tick boundary; it is not the Net
+package.
 
 ## Verification
 

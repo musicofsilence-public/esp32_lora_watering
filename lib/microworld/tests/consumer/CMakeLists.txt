@@ -20,12 +20,18 @@ option(
     "Build the host Core+Memory+Object+Engine consumer without PlatformIO/ESP-IDF"
     OFF
 )
+option(
+    MICROWORLD_STANDALONE_NET_CONSUMER
+    "Build the host Core+Memory+Net consumer without PlatformIO/ESP-IDF"
+    OFF
+)
 
 if(
     MICROWORLD_STANDALONE_CONSUMER
     OR MICROWORLD_STANDALONE_MEMORY_CONSUMER
     OR MICROWORLD_STANDALONE_OBJECT_CONSUMER
     OR MICROWORLD_STANDALONE_ENGINE_CONSUMER
+    OR MICROWORLD_STANDALONE_NET_CONSUMER
 )
     project(microworld_standalone_consumer LANGUAGES CXX)
 
@@ -188,6 +194,52 @@ if(
         microworld_enable_profile_map(
             microworld_engine_consumer
             "${CMAKE_CURRENT_BINARY_DIR}/microworld_engine_profile.map"
+        )
+    endif()
+
+    if(MICROWORLD_STANDALONE_NET_CONSUMER)
+        set(
+            MICROWORLD_MEMORY_BUILD_TESTS
+            OFF
+            CACHE BOOL "" FORCE
+        )
+        set(
+            MICROWORLD_MEMORY_BUILD_BENCHMARKS
+            OFF
+            CACHE BOOL "" FORCE
+        )
+        add_subdirectory(
+            "${CMAKE_CURRENT_LIST_DIR}/../../../microworld-memory"
+            "${CMAKE_CURRENT_BINARY_DIR}/microworld-memory"
+        )
+        set(
+            MICROWORLD_NET_BUILD_TESTS
+            OFF
+            CACHE BOOL "" FORCE
+        )
+        set(
+            MICROWORLD_NET_BUILD_BENCHMARKS
+            OFF
+            CACHE BOOL "" FORCE
+        )
+        add_subdirectory(
+            "${CMAKE_CURRENT_LIST_DIR}/../../../microworld-net"
+            "${CMAKE_CURRENT_BINARY_DIR}/microworld-net"
+        )
+        add_executable(
+            microworld_net_consumer
+            src/NetNativeMain.cpp
+        )
+        target_link_libraries(
+            microworld_net_consumer
+            PRIVATE MicroWorld::Net
+        )
+        microworld_consumer_enable_strict_portable_flags(
+            microworld_net_consumer
+        )
+        microworld_enable_profile_map(
+            microworld_net_consumer
+            "${CMAKE_CURRENT_BINARY_DIR}/microworld_net_profile.map"
         )
     endif()
 else()

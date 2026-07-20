@@ -55,10 +55,11 @@ hardware authorization.
 
 ## Next scope
 
-The minimal managed Engine (`UWorld`, `AActor`, `UActorComponent`) is an
-accepted implementation candidate above Memory and Object. The next scope is
-simple fixed-capacity Engine timers, with simple Net and an ESP32-S3 example
-later.
+The minimal managed Engine (`UWorld`, `AActor`, `UActorComponent`), the Simple
+Timers milestone (`TTimerManager`), and the Simple Net milestone
+(`FByteWriter`/`FByteReader`, `INetDriver`, `FNetManager`, `FHostLoopback`)
+are accepted implementation candidates. The next scope is one ESP32-S3 example
+that demonstrates the completed runtime on the existing ESP32-S3 configuration.
 
 Core does not provide runtime spawn/destroy, timers, networking policy,
 reflection, hardware abstraction, or a real-time guarantee.

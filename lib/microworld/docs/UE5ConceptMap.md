@@ -12,7 +12,7 @@ editor, or asset compatible with UE.
 | Managed object | `UObject`, handles, roots, GC | Object candidate | Fixed caller-owned storage and explicit tracing |
 | Managed World / Actor / Component | `UWorld`, `AActor`, `UActorComponent` | Engine candidate | Application roots World; World/Actor trace children; parent references are weak |
 | Timers | `TTimerManager<MaxTimers, InlineCallbackBytes>` | Engine candidate | Fixed capacity, caller time, explicit OneShot/Looping mode allowlist, single-pass post-dispatch compaction, deterministic insertion-order dispatch, no catch-up bursts |
-| Network byte I/O | `INetDriver` and `FNetManager` | Next | One non-blocking driver, fixed-capacity manager, bounded bytes, and host loopback |
+| Network byte I/O | `INetDriver`, `FNetManager`, `FByteWriter`/`FByteReader`, `FHostLoopback` | Net candidate | One non-blocking driver, fixed-capacity caller-storage-backed manager, bounded bytes over caller-owned spans, transactional failure semantics, and deterministic host loopback independent of Engine |
 
 `TObjectPtr` is a traced managed reference, `TWeakObjectPtr` observes without
 retaining, and `TStrongObjectPtr` is an explicit external root. They are not

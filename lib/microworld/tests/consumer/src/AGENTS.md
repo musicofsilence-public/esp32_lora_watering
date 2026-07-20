@@ -10,7 +10,9 @@ profile through one shared public-API probe. `ObjectNativeMain.cpp` and
 `ObjectEsp32Main.cpp` exercise the Core+Memory+Object profile through fixed
 storage, root, weak-reference, and collection APIs. `EngineNativeMain.cpp` and
 `EngineEsp32Main.cpp` exercise the accepted Core+Memory+Object+Engine compile
-profile.
+profile. `NetNativeMain.cpp` and `NetEsp32Main.cpp` exercise the
+Core+Memory+Net compile profile through byte writer/reader, loopback, and
+manager APIs.
 `Esp32BenchmarkMain.cpp` remains the only target runtime harness. The parent
 project guarantees that only one entry point is linked per environment.
 
@@ -27,6 +29,9 @@ project guarantees that only one entry point is linked per environment.
   after unrooted reclamation through public APIs.
 - Engine probes cover representative registration, lifecycle, tick, and
   collection APIs without claiming target runtime behavior.
+- Net probes cover representative byte writer/reader, loopback send/receive,
+  manager queue/advance/receive, and all four `ENetResult` paths without
+  claiming target runtime behavior.
 - The benchmark owns ESP-IDF counters, serial output, heap/stack sampling, and
   fixed workloads so target dependencies remain outside MicroWorld.
 - Benchmark validation compares cumulative tick counts after every trial to
@@ -40,4 +45,4 @@ bounded.
 
 - Verify with `pio run -d lib/microworld/tests/consumer -e native`,
   `-e esp32-s3`, `-e esp32-s3-memory`, `-e esp32-s3-object`,
-  `-e esp32-s3-engine`, or `-e esp32-s3-benchmark`.
+  `-e esp32-s3-engine`, `-e esp32-s3-net`, or `-e esp32-s3-benchmark`.

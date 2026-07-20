@@ -9,35 +9,22 @@ import tempfile
 from pathlib import Path
 
 
-# Profile names describe package bundles; Integration stays opt-in because it
-# couples Engine scheduling to the independent Net overlay.
+# Profile names describe package bundles. Net is an independent overlay above
+# Memory: it never pulls Object or Engine, and no Engine-Net Integration profile
+# is retained because that coupling is deferred until a real application needs it.
 PROFILE_MODULES = {
     "Core": {"Core"},
     "Memory": {"Core", "Memory"},
     "Object": {"Core", "Memory", "Object"},
-    "Core+Net": {"Core", "Memory", "Serialization", "Net"},
+    "Core+Net": {"Core", "Memory", "Net"},
     "Managed": {"Core", "Memory", "Object", "Engine"},
-    "Managed+Net": {
-        "Core",
-        "Memory",
-        "Object",
-        "Engine",
-        "Serialization",
-        "Net",
-    },
-    "Managed+Net+Integration": {
-        "Core",
-        "Memory",
-        "Object",
-        "Engine",
-        "Serialization",
-        "Net",
-        "Integration",
-    },
+    "Managed+Net": {"Core", "Memory", "Object", "Engine", "Net"},
 }
 
 # Markers cover planned CMake target/archive names, PlatformIO package archives,
-# public include paths, and characteristic public symbols.
+# public include paths, and characteristic public symbols. Serialization and
+# Integration stay listed so any accidental linkage is still detected even though
+# no active profile selects them.
 MODULE_MARKERS = {
     "Memory": (
         "microworld_memory",
@@ -114,6 +101,16 @@ OBJECT_ARCHIVE_MARKERS = (
     "libmicroworldobject.a",
 )
 
+# Net profiles must link their separate package archive. Header-only byte I/O
+# evidence does not prove that the INetDriver out-of-line destructor participated.
+NET_ARCHIVE_MARKERS = (
+    "microworld_net:",
+    "microworld_net.lib",
+    "libmicroworld_net.a",
+    "libmicroworld-net.a",
+    "libmicroworldnet.a",
+)
+
 
 def parse_arguments() -> argparse.Namespace:
     """Define one map/profile gate or run the checker's isolated self-test."""
@@ -162,6 +159,14 @@ def analyze_map(
         errors.append(
             "map does not contain the MicroWorld Object archive "
             f"({', '.join(OBJECT_ARCHIVE_MARKERS)})"
+        )
+
+    if "Net" in selected_modules and not any(
+        marker in normalized_text for marker in NET_ARCHIVE_MARKERS
+    ):
+        errors.append(
+            "map does not contain the MicroWorld Net archive "
+            f"({', '.join(NET_ARCHIVE_MARKERS)})"
         )
 
     for module, markers in MODULE_MARKERS.items():
@@ -287,6 +292,50 @@ def run_self_test() -> int:
     if not any("Core archive" in error for error in missing_errors):
         print(
             "Self-test did not detect missing Core archive evidence.",
+            file=sys.stderr,
+        )
+        return 1
+
+    # A valid Core+Net map links the Core, Memory, and Net archives without
+    # pulling Object or Engine, proving the Net overlay is independent of them.
+    valid_core_net_map = (
+        "libmicroworld.a(TickFunction.o)\n"
+        "libmicroworld_memory:MemoryResource.obj\n"
+        "libmicroworld_net:NetDriver.obj\n"
+        "MicroWorld::FNetManager\n"
+    )
+    valid_core_net_errors = analyze_map(valid_core_net_map, "Core+Net", [], [])
+    if valid_core_net_errors:
+        for error in valid_core_net_errors:
+            print(
+                f"Valid Core+Net-map self-test failed: {error}",
+                file=sys.stderr,
+            )
+        return 1
+
+    # A Core+Net map lacking the Net archive must fail, proving header-only
+    # evidence cannot satisfy the Net profile.
+    missing_net_errors = analyze_map(valid_memory_map, "Core+Net", [], [])
+    if not any("Net archive" in error for error in missing_net_errors):
+        print(
+            "Self-test did not detect missing Net archive evidence.",
+            file=sys.stderr,
+        )
+        return 1
+
+    # A Core+Net map pulling Engine code must fail as an unselected module,
+    # proving Net stays independent of the managed runtime.
+    outward_core_net_map = (
+        f"{valid_core_net_map}"
+        "libmicroworld_engine.a(World.o)\n"
+        "MicroWorld::UWorld\n"
+    )
+    outward_core_net_errors = analyze_map(outward_core_net_map, "Core+Net", [], [])
+    if not any(
+        "unselected Engine" in error for error in outward_core_net_errors
+    ):
+        print(
+            "Self-test did not detect Engine code in a Core+Net profile.",
             file=sys.stderr,
         )
         return 1
