@@ -1,6 +1,7 @@
 #pragma once
 
 #include <MicroWorld/Containers/Span.h>
+#include <MicroWorld/Net/NetAddress.h>
 #include <MicroWorld/Net/NetResult.h>
 
 #include <cstddef>
@@ -27,7 +28,7 @@ struct FNetReceiveResult
 };
 
 /**
- * Bounds one non-blocking byte transport behind a single reference-held interface.
+ * Bounds one non-blocking addressed byte transport behind a single reference-held interface.
  *
  * Each call performs at most one transport operation and returns an explicit
  * `ENetResult` so a caller can poll without blocking and distinguish transient
@@ -40,24 +41,28 @@ class INetDriver
 {
 public:
 	/**
-	 * Sends one complete packet or rejects it transactionally.
+	 * Sends one complete packet to `To` or rejects it transactionally.
 	 * Returns `Success` only when the whole span was accepted, `Full` when the
-	 * transport lacks capacity for the packet, and `Invalid` for a null span with
-	 * nonzero length or a packet larger than the transport's maximum. A non-success
-	 * result leaves the transport state unchanged.
+	 * transport lacks capacity for the packet, `Invalid` for a null span with
+	 * nonzero length, a packet larger than the transport's maximum, or a
+	 * destination address the driver cannot route. A non-success result leaves
+	 * the transport state unchanged.
 	 */
-	virtual ENetResult TrySend(TSpan<const std::uint8_t> Packet) noexcept = 0;
+	virtual ENetResult TrySend(const FNetAddress& To, TSpan<const std::uint8_t> Packet) noexcept = 0;
 
 	/**
 	 * Receives at most one packet into the caller-owned destination.
 	 * The operation is transactional: on `Full`, `Invalid`, or `Unavailable` the
-	 * destination and `OutResult.BytesReceived` are unchanged. Returns `Success`
-	 * only when a packet was delivered (writes the head bytes and the byte count),
-	 * `Unavailable` when no packet is ready, `Full` when the destination is too
-	 * small for the queued head packet, and `Invalid` for a null destination with
-	 * nonzero length.
+	 * destination, `OutResult.BytesReceived`, and `OutFrom` are unchanged.
+	 * Returns `Success` only when a packet was delivered (writes the head bytes,
+	 * the byte count, and the sender address into `OutFrom`), `Unavailable` when
+	 * no packet is ready, `Full` when the destination is too small for the queued
+	 * head packet, and `Invalid` for a null destination with nonzero length.
 	 */
-	virtual ENetResult TryReceive(TSpan<std::uint8_t> Destination, FNetReceiveResult& OutResult) noexcept = 0;
+	virtual ENetResult TryReceive(FNetAddress& OutFrom, TSpan<std::uint8_t> Destination, FNetReceiveResult& OutResult) noexcept = 0;
+
+	/** Reports the largest packet, in bytes, the transport accepts on a single send. */
+	virtual std::size_t MaxPacketBytes() const noexcept = 0;
 
 	/** Gives every concrete driver one stable virtual destructor out of line. */
 	virtual ~INetDriver() noexcept;

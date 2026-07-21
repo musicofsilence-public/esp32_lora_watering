@@ -1,5 +1,7 @@
 #pragma once
 
+#include <MicroWorld/Net/NetAddress.h>
+
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -54,6 +56,9 @@ private:
 
 	/** Records the valid byte length of each queued packet so sends and receives stay exact. */
 	std::array<std::size_t, MaxPackets> PacketLengths{};
+
+	/** Records the destination address queued with each packet so AdvanceSend routes it correctly. */
+	std::array<FNetAddress, MaxPackets> Destinations{};
 };
 
 } // namespace MicroWorld

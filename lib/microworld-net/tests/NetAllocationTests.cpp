@@ -5,6 +5,7 @@
 #include <MicroWorld/Net/ByteReader.h>
 #include <MicroWorld/Net/ByteWriter.h>
 #include <MicroWorld/Net/HostLoopback.h>
+#include <MicroWorld/Net/NetAddress.h>
 #include <MicroWorld/Net/NetDriver.h>
 #include <MicroWorld/Net/NetManager.h>
 #include <MicroWorld/Net/NetPacketStorage.h>
@@ -21,10 +22,12 @@ using MicroWorld::ENetResult;
 using MicroWorld::FByteReader;
 using MicroWorld::FByteWriter;
 using MicroWorld::FHostLoopback;
+using MicroWorld::FNetAddress;
 using MicroWorld::FNetManager;
 using MicroWorld::FNetPacketStorage;
 using MicroWorld::FNetReceiveResult;
 using MicroWorld::INetDriver;
+using MicroWorld::MakeLoopbackAddress;
 using MicroWorld::TSpan;
 using MicroWorld::Tests::GlobalAllocationCount;
 
@@ -43,9 +46,11 @@ MW_TEST_CASE(NetOperationsPerformNoObservableAllocation)
 
 	FByteWriter Writer(TSpan<std::uint8_t>(WriterStorage.data(), WriterStorage.size()));
 	FByteReader Reader(TSpan<const std::uint8_t>(Source.data(), Source.size()));
-	FHostLoopback<2, 8> Loopback;
+	// A two-port loopback with port 0 sending to its own mailbox reproduces the single-link FIFO.
+	FHostLoopback<2, 2, 8> Loopback;
+	const FNetAddress Port0 = MakeLoopbackAddress(0);
 	FNetPacketStorage<2, 8> ManagerStorage;
-	FNetManager<2, 8> Manager(Loopback, ManagerStorage);
+	FNetManager<2, 8> Manager(Loopback.Port(0), ManagerStorage);
 
 	// Capture the counter only after every fixed-storage object is constructed.
 	const std::uint32_t AllocationsBefore = GlobalAllocationCount;
@@ -63,34 +68,37 @@ MW_TEST_CASE(NetOperationsPerformNoObservableAllocation)
 
 	const std::array<std::uint8_t, 4> FirstPacket{0x01, 0x02, 0x03, 0x04};
 	const std::array<std::uint8_t, 4> SecondPacket{0x05, 0x06, 0x07, 0x08};
-	(void)Manager.QueueSend(TSpan<const std::uint8_t>(FirstPacket.data(), FirstPacket.size()));
-	(void)Manager.QueueSend(TSpan<const std::uint8_t>(SecondPacket.data(), SecondPacket.size()));
+	(void)Manager.QueueSend(Port0, TSpan<const std::uint8_t>(FirstPacket.data(), FirstPacket.size()));
+	(void)Manager.QueueSend(Port0, TSpan<const std::uint8_t>(SecondPacket.data(), SecondPacket.size()));
 
 	(void)Manager.AdvanceSend();
 	(void)Manager.AdvanceSend();
 
 	std::array<std::uint8_t, 8> ReceiveDestination{};
 	FNetReceiveResult FirstReceive{};
-	(void)Manager.Receive(TSpan<std::uint8_t>(ReceiveDestination.data(), ReceiveDestination.size()), FirstReceive);
+	FNetAddress FirstFrom{};
+	(void)Manager.Receive(FirstFrom, TSpan<std::uint8_t>(ReceiveDestination.data(), ReceiveDestination.size()), FirstReceive);
 	FNetReceiveResult SecondReceive{};
-	(void)Manager.Receive(TSpan<std::uint8_t>(ReceiveDestination.data(), ReceiveDestination.size()), SecondReceive);
+	FNetAddress SecondFrom{};
+	(void)Manager.Receive(SecondFrom, TSpan<std::uint8_t>(ReceiveDestination.data(), ReceiveDestination.size()), SecondReceive);
 
 	// Exercise the empty and full paths: advance an empty FIFO and queue into a full one.
 	(void)Manager.AdvanceSend();
 	FNetPacketStorage<1, 4> FullManagerStorage;
-	FNetManager<1, 4> FullManager(Loopback, FullManagerStorage);
+	FNetManager<1, 4> FullManager(Loopback.Port(0), FullManagerStorage);
 	const std::array<std::uint8_t, 2> Packet{0xAA, 0xBB};
-	(void)FullManager.QueueSend(TSpan<const std::uint8_t>(Packet.data(), Packet.size()));
-	(void)FullManager.QueueSend(TSpan<const std::uint8_t>(Packet.data(), Packet.size()));
+	(void)FullManager.QueueSend(Port0, TSpan<const std::uint8_t>(Packet.data(), Packet.size()));
+	(void)FullManager.QueueSend(Port0, TSpan<const std::uint8_t>(Packet.data(), Packet.size()));
 
 	// Exercise drain and capacity reuse on the loopback.
-	Loopback.Drain();
-	(void)Loopback.TrySend(TSpan<const std::uint8_t>(Packet.data(), Packet.size()));
+	Loopback.Drain(0);
+	(void)Loopback.Port(0).TrySend(Port0, TSpan<const std::uint8_t>(Packet.data(), Packet.size()));
 
 	// Exercise the unavailable receive path on a drained loopback.
 	FNetReceiveResult EmptyReceive{std::size_t{0xEE}};
 	std::array<std::uint8_t, 4> EmptyDestination{};
-	(void)Loopback.TryReceive(TSpan<std::uint8_t>(EmptyDestination.data(), EmptyDestination.size()), EmptyReceive);
+	FNetAddress EmptyFrom{};
+	(void)Loopback.Port(0).TryReceive(EmptyFrom, TSpan<std::uint8_t>(EmptyDestination.data(), EmptyDestination.size()), EmptyReceive);
 
 	const std::uint32_t AllocationsAfter = GlobalAllocationCount;
 	MW_EXPECT_EQ(Test, AllocationsBefore, AllocationsAfter, "Steady-state Net operations must not allocate");

@@ -41,12 +41,13 @@ public:
 	~FNetManager() noexcept = default;
 
 	/**
-	 * Copies one complete packet into the outbound FIFO tail.
-	 * Returns `Invalid` for a null packet with nonzero length or a packet larger than
-	 * `MaxPacketBytes` (it can never fit). Returns `Full` when the FIFO has no free slot.
-	 * A non-success result leaves the FIFO contents and order unchanged.
+	 * Copies one complete packet with its destination address into the outbound FIFO tail.
+	 * The address is opaque to the manager; the driver validates it. Returns `Invalid`
+	 * for a null packet with nonzero length or a packet larger than `MaxPacketBytes`
+	 * (it can never fit). Returns `Full` when the FIFO has no free slot. A non-success
+	 * result leaves the FIFO contents and order unchanged.
 	 */
-	ENetResult QueueSend(TSpan<const std::uint8_t> Packet) noexcept
+	ENetResult QueueSend(const FNetAddress& To, TSpan<const std::uint8_t> Packet) noexcept
 	{
 		const std::size_t PacketSize = Packet.Size();
 		if (PacketSize == 0)
@@ -55,7 +56,7 @@ public:
 			{
 				return ENetResult::Full;
 			}
-			StorePacketAt(TailIndex, Packet, 0);
+			StorePacketAt(TailIndex, To, Packet, 0);
 			AdvanceTail();
 			return ENetResult::Success;
 		}
@@ -72,13 +73,13 @@ public:
 		{
 			return ENetResult::Full;
 		}
-		StorePacketAt(TailIndex, Packet, PacketSize);
+		StorePacketAt(TailIndex, To, Packet, PacketSize);
 		AdvanceTail();
 		return ENetResult::Success;
 	}
 
 	/**
-	 * Attempts to send the FIFO head through the driver.
+	 * Attempts to send the FIFO head through the driver to its stored destination.
 	 * Performs at most one driver send. On `Success` the head packet is removed.
 	 * On `Full`, `Unavailable`, or `Invalid` from the driver, the head packet is
 	 * retained and FIFO order is preserved so the next advance can retry it.
@@ -92,7 +93,7 @@ public:
 			return ENetResult::Unavailable;
 		}
 		const TSpan<const std::uint8_t> HeadPacket(Storage.PacketBytes[HeadIndex].data(), Storage.PacketLengths[HeadIndex]);
-		const ENetResult SendResult = Driver.TrySend(HeadPacket);
+		const ENetResult SendResult = Driver.TrySend(Storage.Destinations[HeadIndex], HeadPacket);
 		if (SendResult != ENetResult::Success)
 		{
 			// Retain the head and preserve order; the caller retries on the next advance.
@@ -107,10 +108,13 @@ public:
 	/**
 	 * Performs at most one direct driver receive into caller storage.
 	 * The operation is transactional: on `Full`, `Invalid`, or `Unavailable` the
-	 * destination and `OutResult.BytesReceived` are unchanged. The manager never
-	 * queues inbound packets.
+	 * destination, `OutResult.BytesReceived`, and `OutFrom` are unchanged. The
+	 * manager never queues inbound packets.
 	 */
-	ENetResult Receive(TSpan<std::uint8_t> Destination, FNetReceiveResult& OutResult) noexcept { return Driver.TryReceive(Destination, OutResult); }
+	ENetResult Receive(FNetAddress& OutFrom, TSpan<std::uint8_t> Destination, FNetReceiveResult& OutResult) noexcept
+	{
+		return Driver.TryReceive(OutFrom, Destination, OutResult);
+	}
 
 	/** Reports the fixed packet-slot capacity of this manager's outbound FIFO. */
 	static constexpr std::size_t QueueCapacity() noexcept { return MaxPackets; }
@@ -128,14 +132,15 @@ public:
 	constexpr bool IsFull() const noexcept { return QueuedCount >= MaxPackets; }
 
 private:
-	/** Copies one accepted packet and its length into the slot at `Index`. */
-	void StorePacketAt(const std::size_t Index, TSpan<const std::uint8_t> Packet, const std::size_t PacketSize) noexcept
+	/** Copies one accepted packet, its length, and its destination address into the slot at `Index`. */
+	void StorePacketAt(const std::size_t Index, const FNetAddress& To, TSpan<const std::uint8_t> Packet, const std::size_t PacketSize) noexcept
 	{
 		if (PacketSize > 0)
 		{
 			std::memcpy(Storage.PacketBytes[Index].data(), Packet.Data(), PacketSize);
 		}
 		Storage.PacketLengths[Index] = PacketSize;
+		Storage.Destinations[Index] = To;
 	}
 
 	/** Advances the tail and count after one accepted packet. */
