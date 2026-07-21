@@ -185,31 +185,72 @@ bool RegisterHostTypes(FHost& Host) noexcept
 		&& Host.RegisterClass(PlainComponentDescriptor) == EObjectResult::Success;
 }
 
+/**
+ * Owns the shared per-test state and builds one registered, world-attached actor
+ * and component graph on a host so each case starts from the same baseline.
+ *
+ * The fixture owns the sequence, event sinks, component registry, and constructed
+ * handles so they outlive the host whose store retains the actor; declare it
+ * before the host in each test so destruction order drops the host first.
+ */
+struct FHostFixture final
+{
+	/** Shares the monotonic sequence across the actor and its component. */
+	FSequenceCounter Sequence{};
+
+	/** Records the actor's begin/tick/end counts and ordering stamps. */
+	FActorEventState ActorEvents{};
+
+	/** Records the component's begin/tick/end counts and ordering stamps. */
+	FComponentEventState ComponentEvents{};
+
+	/** Owns the component registry lease the actor holds a view into for its lifetime. */
+	MicroWorld::FActorComponentRegistry<2> ActorComponents{};
+
+	/** Holds the constructed actor handle so the test can drive and observe its lifecycle. */
+	TObjectPtr<FHostActor> Actor{};
+
+	/** Holds the constructed component handle so the test can read its event state. */
+	TObjectPtr<FHostComponent> Component{};
+
+	/**
+	 * Registers the user types, creates the world, constructs the actor and component,
+	 * and wires them onto the host. Returns false if any step fails so the caller can
+	 * assert the common baseline without repeating the graph construction inline.
+	 */
+	bool Build(FHost& Host) noexcept
+	{
+		if (!RegisterHostTypes(Host))
+		{
+			return false;
+		}
+		const TObjectPtr<UWorld> World = Host.CreateWorld();
+		if (World.Get() == nullptr)
+		{
+			return false;
+		}
+		Actor = Host.NewObject<FHostActor>(*Host.FindClass(HostActorTypeId), ActorComponents.MakeView(), Sequence, ActorEvents).Object;
+		Component = Host.NewObject<FHostComponent>(*Host.FindClass(HostComponentTypeId), Sequence, ComponentEvents).Object;
+		if (Actor.Get() == nullptr || Component.Get() == nullptr)
+		{
+			return false;
+		}
+		if (Actor.Get()->RegisterComponent(Component) != EEngineResult::Success)
+		{
+			return false;
+		}
+		return Host.GetWorld().RegisterActor(TObjectPtr<AActor>{Actor}) == EEngineResult::Success;
+	}
+};
+
 } // namespace
 
 /** Proves the host runs begin, tick, and end through TEngineHost in the engine's deterministic order. */
 MW_TEST_CASE(EngineHostLifecycleRunsBeginTickEndInOrder)
 {
-	FSequenceCounter Sequence{};
-	FActorEventState ActorEvents{};
-	FComponentEventState ComponentEvents{};
-
+	FHostFixture Fixture{};
 	FHost Host{FGarbageCollectionBudget{1, 4, 8}};
-	MW_EXPECT_TRUE(Test, RegisterHostTypes(Host), "User actor and component classes register on the host");
-
-	MicroWorld::FActorComponentRegistry<2> ActorComponents;
-	const TObjectPtr<UWorld> World = Host.CreateWorld();
-	MW_EXPECT_TRUE(Test, World.Get() != nullptr, "CreateWorld returns the rooted world");
-
-	const TObjectPtr<FHostActor> Actor =
-		Host.NewObject<FHostActor>(*Host.FindClass(HostActorTypeId), ActorComponents.MakeView(), Sequence, ActorEvents).Object;
-	const TObjectPtr<FHostComponent> Component =
-		Host.NewObject<FHostComponent>(*Host.FindClass(HostComponentTypeId), Sequence, ComponentEvents).Object;
-	MW_EXPECT_TRUE(Test, Actor.Get() != nullptr && Component.Get() != nullptr, "User actor and component construct through the host store");
-
-	MW_EXPECT_EQ(Test, EEngineResult::Success, Actor.Get()->RegisterComponent(Component), "The component registers on the actor before BeginPlay");
-	MW_EXPECT_EQ(
-		Test, EEngineResult::Success, Host.GetWorld().RegisterActor(TObjectPtr<AActor>{Actor}), "The actor registers on the world before BeginPlay");
+	MW_EXPECT_TRUE(Test, Fixture.Build(Host), "The fixture builds the registered, world-attached actor and component");
 
 	MW_EXPECT_EQ(Test, ERuntimeResult::Success, Host.BeginPlay(0), "BeginPlay reports success at the canonical baseline");
 	MW_EXPECT_EQ(Test, ERuntimeResult::Success, Host.Tick(10), "Tick at 10 ms reports success");
@@ -217,45 +258,31 @@ MW_TEST_CASE(EngineHostLifecycleRunsBeginTickEndInOrder)
 	MW_EXPECT_EQ(Test, ERuntimeResult::Success, Host.Tick(30), "Tick at 30 ms reports success");
 	MW_EXPECT_EQ(Test, ERuntimeResult::Success, Host.EndPlay(), "EndPlay reports success after the frame schedule");
 
-	MW_EXPECT_EQ(Test, std::uint32_t{1}, ActorEvents.BeginCount, "The actor begin hook runs exactly once");
-	MW_EXPECT_EQ(Test, std::uint32_t{3}, ActorEvents.TickCount, "The actor tick hook runs once per frame");
-	MW_EXPECT_EQ(Test, std::uint32_t{1}, ActorEvents.EndCount, "The actor end hook runs exactly once");
-	MW_EXPECT_EQ(Test, std::uint32_t{1}, ComponentEvents.BeginCount, "The component begin hook runs exactly once");
-	MW_EXPECT_EQ(Test, std::uint32_t{3}, ComponentEvents.TickCount, "The component tick hook runs once per frame");
-	MW_EXPECT_EQ(Test, std::uint32_t{1}, ComponentEvents.EndCount, "The component end hook runs exactly once");
-	MW_EXPECT_TRUE(Test, ComponentEvents.BeginOrder < ActorEvents.BeginOrder, "The component begins before its actor");
-	MW_EXPECT_TRUE(Test, ActorEvents.EndOrder < ComponentEvents.EndOrder, "The actor ends before its component");
+	MW_EXPECT_EQ(Test, std::uint32_t{1}, Fixture.ActorEvents.BeginCount, "The actor begin hook runs exactly once");
+	MW_EXPECT_EQ(Test, std::uint32_t{3}, Fixture.ActorEvents.TickCount, "The actor tick hook runs once per frame");
+	MW_EXPECT_EQ(Test, std::uint32_t{1}, Fixture.ActorEvents.EndCount, "The actor end hook runs exactly once");
+	MW_EXPECT_EQ(Test, std::uint32_t{1}, Fixture.ComponentEvents.BeginCount, "The component begin hook runs exactly once");
+	MW_EXPECT_EQ(Test, std::uint32_t{3}, Fixture.ComponentEvents.TickCount, "The component tick hook runs once per frame");
+	MW_EXPECT_EQ(Test, std::uint32_t{1}, Fixture.ComponentEvents.EndCount, "The component end hook runs exactly once");
+	MW_EXPECT_TRUE(Test, Fixture.ComponentEvents.BeginOrder < Fixture.ActorEvents.BeginOrder, "The component begins before its actor");
+	MW_EXPECT_TRUE(Test, Fixture.ActorEvents.EndOrder < Fixture.ComponentEvents.EndOrder, "The actor ends before its component");
 }
 
 /** Proves the host frame order fires due timers before actor/component ticks in the same frame. */
 MW_TEST_CASE(EngineHostFrameOrderRunsTimerBeforeActorTick)
 {
-	FSequenceCounter Sequence{};
-	FActorEventState ActorEvents{};
-	FComponentEventState ComponentEvents{};
+	FHostFixture Fixture{};
 	FTimerFireRecord TimerRecord{};
 
 	FHost Host{FGarbageCollectionBudget{1, 4, 8}};
-	MW_EXPECT_TRUE(Test, RegisterHostTypes(Host), "User actor and component classes register on the host");
-
-	MicroWorld::FActorComponentRegistry<2> ActorComponents;
-	const TObjectPtr<UWorld> World = Host.CreateWorld();
-	MW_EXPECT_TRUE(Test, World.Get() != nullptr, "CreateWorld returns the rooted world");
-
-	const TObjectPtr<FHostActor> Actor =
-		Host.NewObject<FHostActor>(*Host.FindClass(HostActorTypeId), ActorComponents.MakeView(), Sequence, ActorEvents).Object;
-	const TObjectPtr<FHostComponent> Component =
-		Host.NewObject<FHostComponent>(*Host.FindClass(HostComponentTypeId), Sequence, ComponentEvents).Object;
-	MW_EXPECT_EQ(Test, EEngineResult::Success, Actor.Get()->RegisterComponent(Component), "The component registers on the actor before BeginPlay");
-	MW_EXPECT_EQ(
-		Test, EEngineResult::Success, Host.GetWorld().RegisterActor(TObjectPtr<AActor>{Actor}), "The actor registers on the world before BeginPlay");
+	MW_EXPECT_TRUE(Test, Fixture.Build(Host), "The fixture builds the registered, world-attached actor and component");
 	MW_EXPECT_EQ(Test, ERuntimeResult::Success, Host.BeginPlay(0), "BeginPlay reports success at the canonical baseline");
 
 	FHostDelegate TimerCallback;
 	(void)TimerCallback.Bind(
-		[&Sequence, &TimerRecord]() noexcept
+		[&Fixture, &TimerRecord]() noexcept
 		{
-			TimerRecord.Order = Sequence.Next();
+			TimerRecord.Order = Fixture.Sequence.Next();
 			TimerRecord.bFired = true;
 		});
 	FTimerHandle Handle{};
@@ -268,7 +295,7 @@ MW_TEST_CASE(EngineHostFrameOrderRunsTimerBeforeActorTick)
 
 	MW_EXPECT_EQ(Test, ERuntimeResult::Success, Host.Tick(10), "The frame advancing to the timer deadline reports success");
 	MW_EXPECT_TRUE(Test, TimerRecord.bFired, "The timer callback fires at its deadline");
-	MW_EXPECT_TRUE(Test, TimerRecord.Order < ComponentEvents.TickOrder, "The timer slice runs before the component tick in the same frame");
+	MW_EXPECT_TRUE(Test, TimerRecord.Order < Fixture.ComponentEvents.TickOrder, "The timer slice runs before the component tick in the same frame");
 }
 
 /**
@@ -277,26 +304,12 @@ MW_TEST_CASE(EngineHostFrameOrderRunsTimerBeforeActorTick)
  */
 MW_TEST_CASE(EngineHostGarbageCollectorReclaimsUnrootedObjectsInBoundedSlices)
 {
-	FSequenceCounter Sequence{};
-	FActorEventState ActorEvents{};
-	FComponentEventState ComponentEvents{};
+	FHostFixture Fixture{};
 
 	// MaxSweepOperations of 2 is deliberately smaller than the eight object slots, so one tick
 	// cannot inspect every slot and the garbage must drain over successive bounded slices.
 	FHost Host{FGarbageCollectionBudget{1, 1, 2}};
-	MW_EXPECT_TRUE(Test, RegisterHostTypes(Host), "User actor and component classes register on the host");
-
-	MicroWorld::FActorComponentRegistry<2> ActorComponents;
-	const TObjectPtr<UWorld> World = Host.CreateWorld();
-	MW_EXPECT_TRUE(Test, World.Get() != nullptr, "CreateWorld returns the rooted world");
-
-	const TObjectPtr<FHostActor> Actor =
-		Host.NewObject<FHostActor>(*Host.FindClass(HostActorTypeId), ActorComponents.MakeView(), Sequence, ActorEvents).Object;
-	const TObjectPtr<FHostComponent> Component =
-		Host.NewObject<FHostComponent>(*Host.FindClass(HostComponentTypeId), Sequence, ComponentEvents).Object;
-	MW_EXPECT_EQ(Test, EEngineResult::Success, Actor.Get()->RegisterComponent(Component), "The component registers on the actor before BeginPlay");
-	MW_EXPECT_EQ(
-		Test, EEngineResult::Success, Host.GetWorld().RegisterActor(TObjectPtr<AActor>{Actor}), "The actor registers on the world before BeginPlay");
+	MW_EXPECT_TRUE(Test, Fixture.Build(Host), "The fixture builds the registered, world-attached actor and component");
 
 	// Three unreferenced plain components are true garbage: never registered, never rooted, never
 	// reached through any traced edge, so only the GC sweep can reclaim them.
@@ -329,64 +342,57 @@ MW_TEST_CASE(EngineHostGarbageCollectorReclaimsUnrootedObjectsInBoundedSlices)
 /** Proves a rolled-back tick is rejected transactionally without advancing any observed state. */
 MW_TEST_CASE(EngineHostRejectsNonMonotonicTickTransactionally)
 {
-	FSequenceCounter Sequence{};
-	FActorEventState ActorEvents{};
-	FComponentEventState ComponentEvents{};
-
+	FHostFixture Fixture{};
 	FHost Host{FGarbageCollectionBudget{1, 4, 8}};
-	MW_EXPECT_TRUE(Test, RegisterHostTypes(Host), "User actor and component classes register on the host");
-
-	MicroWorld::FActorComponentRegistry<2> ActorComponents;
-	const TObjectPtr<UWorld> World = Host.CreateWorld();
-	MW_EXPECT_TRUE(Test, World.Get() != nullptr, "CreateWorld returns the rooted world");
-
-	const TObjectPtr<FHostActor> Actor =
-		Host.NewObject<FHostActor>(*Host.FindClass(HostActorTypeId), ActorComponents.MakeView(), Sequence, ActorEvents).Object;
-	const TObjectPtr<FHostComponent> Component =
-		Host.NewObject<FHostComponent>(*Host.FindClass(HostComponentTypeId), Sequence, ComponentEvents).Object;
-	MW_EXPECT_EQ(Test, EEngineResult::Success, Actor.Get()->RegisterComponent(Component), "The component registers on the actor before BeginPlay");
-	MW_EXPECT_EQ(
-		Test, EEngineResult::Success, Host.GetWorld().RegisterActor(TObjectPtr<AActor>{Actor}), "The actor registers on the world before BeginPlay");
+	MW_EXPECT_TRUE(Test, Fixture.Build(Host), "The fixture builds the registered, world-attached actor and component");
 
 	MW_EXPECT_EQ(Test, ERuntimeResult::Success, Host.BeginPlay(100), "BeginPlay reports success and records the tick baseline");
 	MW_EXPECT_EQ(Test, ERuntimeResult::Success, Host.Tick(100), "A tick equal to the baseline is monotonic");
 	MW_EXPECT_EQ(Test, ERuntimeResult::Success, Host.Tick(150), "A later tick advances the frame");
-	const std::uint32_t TickCountBeforeRollback = ActorEvents.TickCount;
+	const std::uint32_t TickCountBeforeRollback = Fixture.ActorEvents.TickCount;
 
 	MW_EXPECT_EQ(Test, ERuntimeResult::NonMonotonicTime, Host.Tick(149), "An earlier tick is rejected as non-monotonic");
-	MW_EXPECT_EQ(Test, TickCountBeforeRollback, ActorEvents.TickCount, "A rejected tick advances no actor state");
+	MW_EXPECT_EQ(Test, TickCountBeforeRollback, Fixture.ActorEvents.TickCount, "A rejected tick advances no actor state");
 }
 
 /** Proves EndPlay succeeds twice and runs the end hooks exactly once across both calls. */
 MW_TEST_CASE(EngineHostEndPlayIsIdempotent)
 {
-	FSequenceCounter Sequence{};
-	FActorEventState ActorEvents{};
-	FComponentEventState ComponentEvents{};
-
+	FHostFixture Fixture{};
 	FHost Host{FGarbageCollectionBudget{1, 4, 8}};
-	MW_EXPECT_TRUE(Test, RegisterHostTypes(Host), "User actor and component classes register on the host");
-
-	MicroWorld::FActorComponentRegistry<2> ActorComponents;
-	const TObjectPtr<UWorld> World = Host.CreateWorld();
-	MW_EXPECT_TRUE(Test, World.Get() != nullptr, "CreateWorld returns the rooted world");
-
-	const TObjectPtr<FHostActor> Actor =
-		Host.NewObject<FHostActor>(*Host.FindClass(HostActorTypeId), ActorComponents.MakeView(), Sequence, ActorEvents).Object;
-	const TObjectPtr<FHostComponent> Component =
-		Host.NewObject<FHostComponent>(*Host.FindClass(HostComponentTypeId), Sequence, ComponentEvents).Object;
-	MW_EXPECT_EQ(Test, EEngineResult::Success, Actor.Get()->RegisterComponent(Component), "The component registers on the actor before BeginPlay");
-	MW_EXPECT_EQ(
-		Test, EEngineResult::Success, Host.GetWorld().RegisterActor(TObjectPtr<AActor>{Actor}), "The actor registers on the world before BeginPlay");
+	MW_EXPECT_TRUE(Test, Fixture.Build(Host), "The fixture builds the registered, world-attached actor and component");
 
 	MW_EXPECT_EQ(Test, ERuntimeResult::Success, Host.BeginPlay(0), "BeginPlay reports success at the canonical baseline");
 	MW_EXPECT_EQ(Test, ERuntimeResult::Success, Host.Tick(10), "Tick at 10 ms reports success");
 
 	MW_EXPECT_EQ(Test, ERuntimeResult::Success, Host.EndPlay(), "The first EndPlay reports success");
-	const std::uint32_t ActorEndCountAfterFirst = ActorEvents.EndCount;
-	const std::uint32_t ComponentEndCountAfterFirst = ComponentEvents.EndCount;
+	const std::uint32_t ActorEndCountAfterFirst = Fixture.ActorEvents.EndCount;
+	const std::uint32_t ComponentEndCountAfterFirst = Fixture.ComponentEvents.EndCount;
 
 	MW_EXPECT_EQ(Test, ERuntimeResult::Success, Host.EndPlay(), "A second EndPlay still reports success without changing state");
-	MW_EXPECT_EQ(Test, ActorEndCountAfterFirst, ActorEvents.EndCount, "A repeated EndPlay does not re-run the actor end hook");
-	MW_EXPECT_EQ(Test, ComponentEndCountAfterFirst, ComponentEvents.EndCount, "A repeated EndPlay does not re-run the component end hook");
+	MW_EXPECT_EQ(Test, ActorEndCountAfterFirst, Fixture.ActorEvents.EndCount, "A repeated EndPlay does not re-run the actor end hook");
+	MW_EXPECT_EQ(Test, ComponentEndCountAfterFirst, Fixture.ComponentEvents.EndCount, "A repeated EndPlay does not re-run the component end hook");
+}
+
+/** Proves BeginPlay, Tick, and EndPlay are rejected before CreateWorld constructs the world. */
+MW_TEST_CASE(EngineHostRejectsLifecycleBeforeCreateWorld)
+{
+	FHost Host{FGarbageCollectionBudget{1, 4, 8}};
+	MW_EXPECT_EQ(Test, ERuntimeResult::InvalidLifecycle, Host.BeginPlay(0), "BeginPlay before CreateWorld is rejected as an invalid lifecycle");
+	MW_EXPECT_EQ(Test, ERuntimeResult::InvalidLifecycle, Host.Tick(0), "Tick before CreateWorld is rejected as an invalid lifecycle");
+	MW_EXPECT_EQ(Test, ERuntimeResult::InvalidLifecycle, Host.EndPlay(), "EndPlay before CreateWorld is rejected as an invalid lifecycle");
+}
+
+/** Proves CreateWorld constructs the world exactly once and leaves GetWorld referring to that first world. */
+MW_TEST_CASE(EngineHostCreateWorldIsSingleShot)
+{
+	FHost Host{FGarbageCollectionBudget{1, 4, 8}};
+
+	const TObjectPtr<UWorld> FirstWorld = Host.CreateWorld();
+	MW_EXPECT_TRUE(Test, FirstWorld.Get() != nullptr, "The first CreateWorld constructs and roots the world");
+
+	const TObjectPtr<UWorld> SecondWorld = Host.CreateWorld();
+	MW_EXPECT_TRUE(Test, SecondWorld.Get() == nullptr, "A second CreateWorld returns an empty reference without replacing the world");
+
+	MW_EXPECT_TRUE(Test, &Host.GetWorld() == FirstWorld.Get(), "GetWorld still refers to the first world after the rejected second creation");
 }
