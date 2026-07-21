@@ -795,7 +795,7 @@ order.
   while live literals are present (empirical zero-strings proof at `-O0`);
   `CheckClassDocumentation.py --root lib/microworld` passes (30 files).
 
-- [ ] **3.2 `TEngineHost` composition template.** New header
+- [x] **3.2 `TEngineHost` composition template.** New header
   `lib/microworld-engine/include/MicroWorld/Engine/EngineHost.h`:
 
   ```cpp
@@ -827,6 +827,35 @@ order.
     `FGarbageCollectionBudget` is a constructor parameter.
   - No heap use anywhere; `TEngineHost` itself is meant to live in static
     storage or `main`'s stack frame.
+
+  **Done 2026-07-21.** New header
+  [EngineHost.h](lib/microworld-engine/include/MicroWorld/Engine/EngineHost.h)
+  adds `TEngineHost<MaxClasses, MaxObjects, SlotBytes, SlotAlign, MaxRoots,
+  MaxActors, MaxTimers, TimerCallbackBytes>`. It owns, in construction order, the
+  `TClassRegistry`, the object-store byte/metadata/root storage arrays, the
+  `FObjectStore`, the GC worklist array, the `FGarbageCollector`, the
+  `FWorldActorRegistry<MaxActors>`, and the `TTimerManager` — all fixed-capacity,
+  no heap. The constructor registers the three engine base descriptors and takes
+  the GC budget (plus a bounded reclamation budget, default = all slots).
+
+  API delivered per spec: `RegisterClass`, `CreateWorld` (constructs the one
+  `UWorld` from the registry-owned descriptor via `Find`+`NewObject`, roots it with
+  a stored `TStrongObjectPtr<UWorld>`, one-per-host guarded), transparent
+  `NewObject<T>` forwarding, `GetWorld`/`GetObjectStore`/`GetTimerManager`, and
+  `BeginPlay`/`Tick`/`EndPlay`. `Tick` runs the section-4 frame order exactly:
+  (1) net-receive slot [Phase 4], (2) `Timers.Advance`, (3) `World.Advance`,
+  (4) `World.ApplyPending`, (5) the bounded `Store.ApplyPendingDestroy` reclamation
+  slice (the 2026-07-21 decision — GC sweep skips pending-destroy, so this frees
+  destroyed actors), (6) idle-gated `RequestCollection` + bounded `Advance`,
+  (7) net-send slot [Phase 4]. A per-tick monotonic guard rejects a rolled-back
+  clock transactionally before any step runs.
+
+  Evidence: a throwaway strict-compile probe instantiating `TEngineHost<8,16,512,
+  16,4,8,4,32>` and exercising every substantive method compiles clean under the
+  engine's `-std=gnu++17 -fno-exceptions -fno-rtti -Wall -Wextra -Wpedantic
+  -Werror` (probe not committed — the host tests + example are task 3.3);
+  `build/host-eng` still builds and CTest passes 1/1 (no regression);
+  `CheckClassDocumentation.py --root lib/microworld-engine` passes.
 
 - [ ] **3.3 Tests + example for the host.**
   `lib/microworld-engine/tests/EngineHostTests.cpp`: begin/tick/end lifecycle;
