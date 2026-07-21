@@ -1,0 +1,24 @@
+{
+  "name": "MicroWorldPlatformEsp32",
+  "version": "0.1.0",
+  "description": "MicroWorld PlatformEsp32: ESP32-S3 platform adapter (esp_timer clock, lwIP UDP INetDriver, ESP_LOG sink)",
+  "keywords": [
+    "embedded",
+    "esp32",
+    "platform",
+    "udp",
+    "lwip"
+  ],
+  "license": "MIT",
+  "frameworks": "espidf",
+  "platforms": "espressif32",
+  "build": {
+    "includeDir": "include",
+    "srcDir": "src",
+    "libArchive": true,
+    "flags": [
+      "-fno-exceptions",
+      "-fno-rtti"
+    ]
+  }
+}

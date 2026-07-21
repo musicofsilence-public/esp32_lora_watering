@@ -1237,7 +1237,7 @@ platform-free (dependency checker must keep passing).
   `lib/microworld-platform-host/CMakeLists.txt` (new), `MICROWORLD_ROADMAP.md`.
   No `PROGRESS.md` row (phase not yet ✅). Tasks 5.2–5.3 not started.
 
-- [ ] **5.2 `microworld-platform-esp32` package.** `lib/microworld-platform-esp32/`
+- [x] **5.2 `microworld-platform-esp32` package.** `lib/microworld-platform-esp32/`
   (ESP-IDF component style, PlatformIO-compatible like the existing consumer
   probes): `FEsp32TimeSource` (`esp_timer_get_time()/1000`), `FEsp32UdpDriver`
   (lwIP non-blocking UDP, same address encoding as host driver), a log sink
@@ -1252,6 +1252,63 @@ platform-free (dependency checker must keep passing).
   ```
   **Done when:** ESP32 image builds; RAM/flash recorded in the package's
   `benchmarks/Results/Esp32S3N16R8.md`.
+
+  **Completed (2026-07-21):** Added the second **non-portable** platform package
+  `lib/microworld-platform-esp32/`, the ESP32 sibling of the host adapter
+  shipped in 5.1 and likewise excluded by design from
+  `CheckDependencyBoundaries.py` (it may include lwIP/ESP-IDF headers; the
+  checker governs only Core/Memory/Object/Engine/Net). Deliverables:
+  `FEsp32TimeSource` (`esp_timer_get_time()/1000` → `TimePointMilliseconds`,
+  the single real clock the engine consumes; no baseline — `esp_timer` is
+  already monotonic-since-boot), `MakeUdpAddress`/`IsUdpAddress`/
+  `UdpAddressPort` (byte-identical 6-byte IPv4+port encoding of the opaque
+  `FNetAddress`, intentionally duplicated from the host adapter so each
+  platform package is self-contained), `Esp32LogSink` (free function matching
+  `FLogSink`, mapping `ELogLevel` → `ESP_LOGE/W/I/V` with `Category` as the
+  ESP-IDF tag), and `FEsp32UdpDriver final : INetDriver` (one non-blocking
+  `SOCK_DGRAM` on `INADDR_ANY`, ephemeral port via bind-0 + `getsockname`,
+  no netif/WiFi initialized). All lwIP/ESP-IDF socket headers are confined to
+  `src/Esp32SocketGlue.h` (sole home of `<lwip/sockets.h>`); the four public
+  headers stay platform-free. Every op is transactional — arguments validated
+  before any syscall, `BytesReceived`/`OutFrom` left unchanged on any
+  non-`Success`; the receive path ports the 5.1 fix verbatim: the sizing peek
+  reads into an internal 1200-byte scratch (never the caller's destination), so
+  `Full` leaves both the destination and the queue untouched. The MSG_TRUNC
+  caveat is documented: when lwIP defines `MSG_TRUNC` the peek returns the true
+  length, otherwise it sizes from the delivered length and the exact oversize
+  behavior is UNVERIFIED at runtime (compile-only phase); a `static_assert`
+  ties `PeekScratchBytes` to `UdpMaxPacketBytes`. The Done-when proof
+  (`lib/microworld/tests/consumer/src/PlatformEsp32Main.cpp`) composes the full
+  stack — `SetLogSink(&Esp32LogSink)` → `FEsp32TimeSource` → `FEsp32UdpDriver`
+  → `TNetHost<4,256>` (DedicatedServer) → `TNetHostFrame` → `TEngineHost<6,8,
+  256,16,1,2,4,64>` (same template args as the Engine profile probe), then
+  ticks at 20 ms via `vTaskDelay(pdMS_TO_TICKS(20))`; it is a
+  compile/composition proof only (no netif/WiFi, so no packet can flow).
+  Verify evidence: clean Xtensa-ESP-ELF GCC 15.2.0 build, `[SUCCESS]` in 62.44
+  s, **RAM 21,772 / 327,680 bytes (6.6%)**, **Flash 283,473 / 4,194,304 bytes
+  (6.8%)**; regression rebuilds of `esp32-s3-engine` (74.63 s) and `esp32-s3-net`
+  (74.91 s) both `[SUCCESS]`; CheckClassDocumentation passed (7 files);
+  CheckDependencyBoundaries passed (5 packages, 51 files — platform-esp32
+  excluded by design); `clang-format --style=file:clang-format --dry-run
+  --Werror` exit 0. POSIX/lwIP caveat: the platform env is the first consumer
+  to `#include` ESP-IDF headers from C++, whose `esp_libc`/lwIP shims use the
+  GCC `#include_next` extension that `-Wpedantic` flags; the env keeps the full
+  strict set but adds `-Wno-error=pedantic` scoped to that one env in
+  `src/CMakeLists.txt` (analogous to the existing `-Wno-deprecated-declarations`
+  for the libstdc++ `std::aligned_storage` issue). Files changed:
+  `lib/microworld-platform-esp32/library.json` (new),
+  `lib/microworld-platform-esp32/include/MicroWorld/PlatformEsp32/Esp32TimeSource.h` (new),
+  `lib/microworld-platform-esp32/include/MicroWorld/PlatformEsp32/UdpAddress.h` (new),
+  `lib/microworld-platform-esp32/include/MicroWorld/PlatformEsp32/Esp32LogSink.h` (new),
+  `lib/microworld-platform-esp32/include/MicroWorld/PlatformEsp32/Esp32UdpDriver.h` (new),
+  `lib/microworld-platform-esp32/src/Esp32UdpDriver.cpp` (new),
+  `lib/microworld-platform-esp32/src/Esp32LogSink.cpp` (new),
+  `lib/microworld-platform-esp32/src/Esp32SocketGlue.h` (new),
+  `lib/microworld-platform-esp32/benchmarks/Results/Esp32S3N16R8.md` (new),
+  `lib/microworld/tests/consumer/src/PlatformEsp32Main.cpp` (new),
+  `lib/microworld/tests/consumer/platformio.ini`,
+  `lib/microworld/tests/consumer/src/CMakeLists.txt`, `MICROWORLD_ROADMAP.md`.
+  No `PROGRESS.md` row (phase not yet ✅). Task 5.3 not started.
 
 - [ ] **5.3 E32 LoRa UART driver.** `FEsp32E32LoraDriver` in the esp32 package:
   UART framing `[u8 0xA5][u8 SrcNodeId][u16 Len][payload][u16 CRC16-CCITT]`,
@@ -1311,6 +1368,7 @@ platform-free (dependency checker must keep passing).
 | 2026-07-21 | **RESOLVED — `TEngineHost` user-type creation ergonomics; owner chose option (a) (add both helpers as Phase 3.4).** Follow-on from the 2026-07-21 `FindClass` row above: the Phase 3 goal states a hello-world app is ~20 lines, but `examples/HostLifecycle/Main.cpp` needs ~46 lines because each user type repeats a build-descriptor → `RegisterClass` → `FindClass` → `NewObject` dance. The minimal `FindClass` accessor was correct for 3.3 scope, but it leaves the canonical app verbose. Candidate (mirrors the existing `TEngineEnvironment::RegisterDerivedClass`/`CreateDerivedObject` test-fixture API, so there is precedent): add two `TEngineHost` template helpers — `template<typename T> EObjectResult RegisterClass(FTypeId, const char* Name)` that derives the parent from `T`'s base via the engine class ids, builds the descriptor with `&TraceManagedObjectReferences`, and registers it; and `template<typename T, typename... A> TObjectCreationResult<T> CreateObject(FTypeId, A&&...)` that folds `FindClass` + `NewObject` into one call. This would cut the hello-world body toward the ~20-line goal at the cost of more `TEngineHost` API surface (two more public templates) and one more place that encodes the "which base parent" rule. Options: (a) add both helpers as a new **Phase 3.4** task (keeps Phase 3 closed; small, testable, documented); (b) defer to Phase 6 (examples/measurement) where the ergonomics gap is felt most and can be judged against real ESP32 apps; (c) do not add — keep `FindClass` as the only public creation path and accept the verbosity as a one-time setup cost. | Owner |
 | 2026-07-21 | **Phase 4.1 loopback object model + `FNetAddress` encoding.** The v2 `INetDriver::TryReceive(FNetAddress& OutFrom, …)` carries no per-call endpoint identity, so a single shared loopback object cannot know which mailbox to drain. Chose the **shared-mailroom** model (owner): one `FHostLoopback<MaxPorts, MailboxCapacity, PacketBytes>` owns N per-port mailboxes AND N embedded per-port `INetDriver`s; `INetDriver& Port(index)` hands out the driver bound to a 1-byte loopback address equal to that port index. Two hosts share one network and each hold their own `Port(i)` — fits 4.3/4.4's one-driver-per-host wiring, and port lifetimes are automatic (ports live inside the network). Rejected: fabric + separately-constructed endpoint objects (adds a caller lifetime-ordering landmine); peer-linked mesh (O(N²) wiring). `FNetAddress` = `std::array<uint8_t,12> Bytes` + `uint8_t Size` + `==`/`!=`; loopback encodes exactly one byte = the port index. Internal decomposition: a `Detail::FLoopbackMailboxes` holds the FIFOs + routing so each per-port driver stores only a complete-type pointer (avoids the nested-in-incomplete-template pitfall). | Owner |
 | 2026-07-21 | **Phase 5.1 first non-portable platform package; UDP address encoding; transactional Full.** Three decisions lifted from `.claude/concepts/platform-host-udp.md`: (1) `microworld-platform-host` is a **non-portable platform package** — excluded from `CheckDependencyBoundaries.py` (no `platform-host` module key; OS socket headers would fail the vendor rule anyway), may include OS socket headers; (2) the UDP `FNetAddress` encoding is 6 bytes (4 IPv4 octets + 2 big-endian port bytes), owned by this package's `MakeUdpAddress`/`IsUdpAddress`/`UdpAddressPort` helpers since `FNetAddress` is deliberately opaque; (3) a receive into a too-small destination returns `Full` **without consuming the datagram or touching the caller's destination** — the sizing peek reads into an internal 1200-byte scratch (`MSG_PEEK`+`MSG_TRUNC` on POSIX returns the true length; Windows `MSG_PEEK` returns the delivered length and `WSAEMSGSIZE` becomes a sentinel "does not fit"), so the single fits-vs-`Full` decision in the driver sees one uniform signal and the `INetDriver` transactional contract holds on both platforms. Cross-platform scope: both Windows + POSIX glue written now behind `#ifdef`; POSIX unverified on this Windows-only host (deferred to 5.2). | Owner |
+| 2026-07-21 | **Phase 5.2 second non-portable platform package; intentionally duplicated UDP address encoding.** (1) `microworld-platform-esp32` is the second **non-portable platform package** — excluded from `CheckDependencyBoundaries.py` for the same reason as `platform-host` (it includes lwIP/ESP-IDF headers), and is the template the E32 LoRa adapter (5.3) will extend. (2) The UDP `FNetAddress` encoding (6 bytes = 4 IPv4 octets + 2 big-endian port bytes) is **duplicated verbatim** from `platform-host` rather than shared: each platform adapter is self-contained, the encoding is a node-local representation that never crosses the wire, and the two packages are never linked into one binary, so there is no interop requirement to match and no shared dependency to introduce. Alternative considered: promote `MakeUdpAddress`/`IsUdpAddress`/`UdpAddressPort` into portable `microworld-net` and have both adapters depend on it. **Rejected** because it would retro-touch a committed, dependency-checked portable package to serve a non-portable concern — the duplication is bounded (three `constexpr` helpers, one file each) and the cost of a future merge (if a third UDP adapter appears) is far lower than the cost of re-opening Net now. (3) The platform env adds `-Wno-error=pedantic` scoped to itself in `src/CMakeLists.txt`: it is the first ESP32 consumer to `#include` ESP-IDF headers from C++, and ESP-IDF's `esp_libc`/lwIP shims use the GCC `#include_next` extension that `-Wpedantic` flags; the full strict set (`-Wall -Wextra -Wpedantic -Werror`) is retained, with only the system-header extension downgraded to a non-fatal warning for this one env (analogous to the existing `-Wno-deprecated-declarations` suppression for libstdc++ `std::aligned_storage`). | Owner |
 
 Add a row here whenever a task forces a design choice not covered by this plan.
 
