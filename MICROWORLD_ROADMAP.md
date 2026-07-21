@@ -510,7 +510,7 @@ API. Core shrinks to shared primitives: `Application.h`, `Lifecycle.h`,
 
 ---
 
-### Phase 2 — Runtime Spawn & Destroy 🟨
+### Phase 2 — Runtime Spawn & Destroy ✅
 
 Goal: a UE5 developer can spawn and destroy actors while the world is playing.
 Bounded, deterministic, deferred: structural changes apply only at one barrier
@@ -678,7 +678,7 @@ std::size_t PendingDestroyCount() const noexcept;
   (`-Wall -Wextra -Wpedantic -Werror -fno-exceptions -fno-rtti`); CTest 1/1;
   runner reports 67 tests, 0 failures (12 new).
 
-- [ ] **2.4 Ergonomics: `TInlineActor<N>` / `TInlineWorld<N>`.** New header
+- [x] **2.4 Ergonomics: `TInlineActor<N>` / `TInlineWorld<N>`.** New header
   `lib/microworld-engine/include/MicroWorld/Engine/InlineTypes.h`. Use the
   base-from-member idiom so the registry storage lives inside the object:
 
@@ -704,6 +704,36 @@ std::size_t PendingDestroyCount() const noexcept;
 
   **Done when:** example + test compile and pass using inline types only;
   doc comments explain the descriptor requirement.
+
+  **Done 2026-07-21.** New header
+  [InlineTypes.h](lib/microworld-engine/include/MicroWorld/Engine/InlineTypes.h)
+  adds `TInlineActor<N>` and `TInlineWorld<N>` via the base-from-member idiom: a
+  private `Detail::TActorRegistryHolder<N>` / `TWorldRegistryHolder<N>` base is
+  declared *before* the `AActor` / `UWorld` base, so its embedded registry is
+  fully constructed when leased to the managed base's constructor (and, by
+  reverse-destruction order, outlives it). Doc comments state the descriptor
+  requirement — each concrete instantiation (the template used directly or any
+  subclass) is its own managed type needing an `FClassDescriptor` from
+  `MakeClassDescriptor<ThatExactType>` with the right parent, and store slots
+  wide enough for the embedded registry.
+
+  New [EngineInlineTypesTests.cpp](lib/microworld-engine/tests/EngineInlineTypesTests.cpp)
+  (2 cases, wired into `MICROWORLD_ENGINE_TEST_SOURCES`) builds a world + actor +
+  component from inline types only — no caller-composed `FWorldActorRegistry` /
+  `FActorComponentRegistry` object — and proves begin/tick/end order matches the
+  lease-composed types, plus that an inline actor still spawns and destroys
+  through the deferred barrier. The Phase 1
+  [HostLifecycle example](lib/microworld-engine/examples/HostLifecycle/Main.cpp)
+  is rewritten on `TInlineWorld<1>` / `TInlineActor<1>` (registry-lease locals
+  removed; slot size widened to 512 for the embedded registries) and still prints
+  the same deterministic trace.
+
+  Evidence: `build/host-eng` builds clean under strict warnings
+  (`-Wall -Wextra -Wpedantic -Werror -fno-exceptions -fno-rtti`); CTest 1/1;
+  runner reports 69 tests, 0 failures (2 new); the example runs (exit 0) with the
+  unchanged trace (component-before-actor begin; sensor ticks at 0/100/200 with 50
+  and 175 skipped; actor-before-component end); `CheckClassDocumentation.py
+  --root lib/microworld-engine` passes (24 files).
 
 ---
 
@@ -1027,7 +1057,7 @@ of its tasks starts, ✅ only when all its tasks are `[x]`.
 | --- | --- | --- | --- |
 | 0 | Baseline & governance | 0.1–0.2 | ✅ |
 | 1 | Consolidation: one Actor model | 1.1–1.4 | ✅ |
-| 2 | Runtime Spawn & Destroy | 2.1–2.4 | 🟨 |
+| 2 | Runtime Spawn & Destroy | 2.1–2.4 | ✅ |
 | 3 | Composition root & logging | 3.1–3.3 | ⬜ |
 | 4 | Networking with roles | 4.1–4.4 | ⬜ |
 | 5 | Platform adapters | 5.1–5.3 | ⬜ |

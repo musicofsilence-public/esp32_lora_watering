@@ -2,7 +2,7 @@
 #include <MicroWorld/Engine/ActorComponent.h>
 #include <MicroWorld/Engine/EngineClassIds.h>
 #include <MicroWorld/Engine/EngineResult.h>
-#include <MicroWorld/Engine/EngineStorage.h>
+#include <MicroWorld/Engine/InlineTypes.h>
 #include <MicroWorld/Engine/World.h>
 #include <MicroWorld/Object/ClassDescriptor.h>
 #include <MicroWorld/Object/Object.h>
@@ -13,7 +13,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
-#include <utility>
 
 namespace
 {
@@ -42,15 +41,12 @@ protected:
 	void EndPlay() noexcept override { std::printf("sensor end\n"); }
 };
 
-/** Aggregates Component state while its own primary tick remains disabled. */
-class FDeviceActor final : public MicroWorld::AActor
+/** Aggregates Component state while owning its component registry inline. */
+class FDeviceActor final : public MicroWorld::TInlineActor<1>
 {
 public:
 	/** Disables only the Actor schedule so Component independence is observable. */
-	explicit FDeviceActor(MicroWorld::FActorComponentRegistryBase Components) noexcept
-		: AActor(std::move(Components), {true, false, 0})
-	{
-	}
+	FDeviceActor() noexcept : TInlineActor<1>({true, false, 0}) {}
 
 protected:
 	/** Marks Actor startup after the Component begin hook. */
@@ -63,6 +59,12 @@ protected:
 	void EndPlay() noexcept override { std::printf("actor end\n"); }
 };
 
+/** The example's world owns its single-actor registry inline. */
+using FDeviceWorld = MicroWorld::TInlineWorld<1>;
+
+/** Stable type id for the example's inline world descriptor. */
+constexpr MicroWorld::FTypeId DeviceWorldTypeId{0x00010003u};
+
 /** Stable type id for the example's user-derived managed actor descriptor. */
 constexpr MicroWorld::FTypeId DeviceActorTypeId{0x00010001u};
 
@@ -71,18 +73,20 @@ constexpr MicroWorld::FTypeId SensorComponentTypeId{0x00010002u};
 
 } // namespace
 
-/** Builds a managed UWorld/AActor/UActorComponent composition and prints deterministic lifecycle evidence. */
+/** Builds a managed composition from inline world/actor types and prints deterministic lifecycle evidence. */
 int main()
 {
 	using namespace MicroWorld;
 
 	constexpr std::uint32_t SlotCount = 4;
 	constexpr std::uint32_t RootCapacity = 2;
-	constexpr std::size_t SlotSizeBytes = 256;
+	// Inline world/actor types embed their registries, so slots are wider than the
+	// lease-composed variant used before the Phase 2 ergonomics work.
+	constexpr std::size_t SlotSizeBytes = 512;
 	constexpr std::size_t SlotAlignmentBytes = 16;
 
-	// Each concrete managed type needs its own descriptor: the two engine base
-	// descriptors plus the derived DeviceActor/SensorComponent descriptors.
+	// Each concrete managed type needs its own descriptor: the three engine base
+	// descriptors plus the inline DeviceWorld and derived DeviceActor/SensorComponent.
 	TClassRegistry<8> Registry;
 	if (Registry.Register(UActorComponent::StaticClassDescriptor()) != EObjectResult::Success
 		|| Registry.Register(AActor::StaticClassDescriptor()) != EObjectResult::Success
@@ -91,11 +95,14 @@ int main()
 		return 1;
 	}
 
+	const FClassDescriptor DeviceWorldDescriptor =
+		MakeClassDescriptor<FDeviceWorld>(DeviceWorldTypeId, "DeviceWorld", Registry.Find(UWorldClassId), &TraceManagedObjectReferences);
 	const FClassDescriptor DeviceDescriptor =
 		MakeClassDescriptor<FDeviceActor>(DeviceActorTypeId, "DeviceActor", Registry.Find(AActorClassId), &TraceManagedObjectReferences);
 	const FClassDescriptor SensorDescriptor = MakeClassDescriptor<FSensorComponent>(
 		SensorComponentTypeId, "SensorComponent", Registry.Find(UActorComponentClassId), &TraceManagedObjectReferences);
-	if (Registry.Register(DeviceDescriptor) != EObjectResult::Success || Registry.Register(SensorDescriptor) != EObjectResult::Success)
+	if (Registry.Register(DeviceWorldDescriptor) != EObjectResult::Success || Registry.Register(DeviceDescriptor) != EObjectResult::Success
+		|| Registry.Register(SensorDescriptor) != EObjectResult::Success)
 	{
 		return 1;
 	}
@@ -121,10 +128,10 @@ int main()
 		return 1;
 	}
 
-	FActorComponentRegistry<1> DeviceComponents;
-	FWorldActorRegistry<1> WorldActors;
-	const TObjectPtr<UWorld> World = Store.NewObject<UWorld>(*Registry.Find(UWorldClassId), WorldActors.MakeView()).Object;
-	const TObjectPtr<FDeviceActor> Device = Store.NewObject<FDeviceActor>(*Registry.Find(DeviceActorTypeId), DeviceComponents.MakeView()).Object;
+	// Inline types carry their own registries, so no FWorldActorRegistry or
+	// FActorComponentRegistry object is composed here.
+	const TObjectPtr<FDeviceWorld> World = Store.NewObject<FDeviceWorld>(*Registry.Find(DeviceWorldTypeId)).Object;
+	const TObjectPtr<FDeviceActor> Device = Store.NewObject<FDeviceActor>(*Registry.Find(DeviceActorTypeId)).Object;
 	const TObjectPtr<FSensorComponent> Sensor = Store.NewObject<FSensorComponent>(*Registry.Find(SensorComponentTypeId)).Object;
 	if (World.Get() == nullptr || Device.Get() == nullptr || Sensor.Get() == nullptr)
 	{
