@@ -887,6 +887,36 @@ order.
   trace and exits 0; `CheckClassDocumentation.py --root lib/microworld-engine`
   passes (24 files).
 
+- [x] **3.4 Host creation ergonomics.** Add `TEngineHost::RegisterClass<T>(id,
+  name)` and `CreateObject<T>(id, args...)` mirroring the test fixture's
+  `RegisterDerivedClass`/`CreateDerivedObject`; simplify the `HostLifecycle`
+  example onto them (trace unchanged). **Done when:** helpers covered by tests;
+  example composition body meaningfully shorter with an unchanged trace; suite
+  green.
+
+  **Completed 2026-07-21.** Added two `TEngineHost` public templates in
+  `lib/microworld-engine/include/MicroWorld/Engine/EngineHost.h`:
+  `RegisterClass<T>(FTypeId, const char*)` derives each descriptor's parent from
+  `T`'s engine base (`AActor`/`UActorComponent`/`UWorld`) via `std::is_base_of`
+  and registers it with the shared `&TraceManagedObjectReferences` tracer, and
+  `CreateObject<T>(FTypeId, Args&&...)` folds `FindClass` + `Store.NewObject<T>`
+  into one call (returning `EObjectResult::UnknownClass` + null for an
+  unregistered id). The existing non-template `RegisterClass(const
+  FClassDescriptor&)` overload is kept. Added two `TEngineHost` cases in
+  `lib/microworld-engine/tests/EngineHostTests.cpp` (helper-driven register +
+  construct + lifecycle-order proof; unregistered-id rejection) wired into
+  `MICROWORLD_ENGINE_TEST_SOURCES`. Rewrote `examples/HostLifecycle/Main.cpp`
+  on the helpers: the per-type build-descriptor → `RegisterClass` → `FindClass`
+  → `NewObject` dance (and the `MakeClassDescriptor`/`TraceManagedObjectReferences`
+  includes it dragged in) is gone; `FSensorComponent`/`FDeviceActor` and the
+  canonical trace are unchanged. GCC 16.1.0 via Ninja: `host-eng` builds clean
+  under `-Wall -Wextra -Wpedantic -Werror -fno-exceptions -fno-rtti`; CTest
+  1/1; runner 78 host cases, 0 failures (2 new);
+  `microworld_engine_host_lifecycle` prints the byte-identical lifecycle trace
+  and exits 0; `CheckClassDocumentation.py --root lib/microworld-engine` passes.
+  `main()` shrank 46 → 43 lines; the register+construct section shrank
+  18 → 7 lines.
+
 ---
 
 ### Phase 4 — Simple networking with roles ⬜
@@ -1122,7 +1152,7 @@ platform-free (dependency checker must keep passing).
 | 2026-07-21 | Phase 2.2 marking of a destroyed actor's components: the store blocks `MarkPendingDestroy` under the dispatch guard `DispatchEndPlay` runs within, and that method is shared with non-destroying world `EndPlay`. Chose **option A** (simplest that works): keep `DispatchEndPlay` pure; `ApplyPending` ends doomed actors under the guard, then marks their components + the actor for destroy after releasing it (new `UWorld`-friend `AActor` helper). Option B (unguarded destroy cascade + a "being destroyed" flag) rejected — it loses reentrancy protection. | Owner |
 | 2026-07-21 | **RESOLVED — who reclaims a destroyed actor's slot.** Surfaced writing 2.3: section 4's old frame order and section 2's design assumed the incremental collector reclaims released actors, but `FGarbageCollector`'s sweep explicitly *skips* pending-destroy slots — those are reclaimed only by the store's `ApplyPendingDestroy` barrier, so the frame order was missing a step (GC alone never frees a destroyed actor). Owner chose **option (a)** (simplest + most reliable): add an explicit, bounded `Store.ApplyPendingDestroy(Budget)` reclamation slice to the `TEngineHost` frame order (now section 4 step 5), keeping `UWorld::ApplyPending` single-purpose and the already-tested Phase 2 code untouched. Rejected: (b) run reclamation inside `UWorld::ApplyPending` — couples the structural barrier to store reclamation and buries the budget; (c) reword only — leaves GC unable to reclaim destroyed actors. Implemented as a spec in section 4; wired for real in Phase 3.2. | Owner |
 | 2026-07-21 | **RESOLVED — `TEngineHost` needs a descriptor lookup.** Surfaced writing 3.3: the 3.2 spec exposed `RegisterClass` but no lookup, and the object store's construction validation requires the descriptor passed to `NewObject` to be the registry's OWN copy (identity check) with `Parent` pointing at the registry's own parent copy (`HasValidParentChain`). Without a lookup, user actors/components cannot be created through the host — which 3.3 requires. Chose **option (a)** (minimal): add one public `const FClassDescriptor* TEngineHost::FindClass(FTypeId) const noexcept` that forwards to `TClassRegistry::Find`, matching how `TEngineEnvironment::FindDescriptor` already exposes the same access for the test fixture. Rejected: (b) variadic auto-register-and-construct helper (`Host.NewObject<FDeviceActor>(id, name, parent_id, ...)` that registers + looks up + constructs in one call) — convenient but hides the descriptor-identity invariant behind a magic helper and over-reaches the 3.2 scope. Applied in the same 3.3 commit; noted in the 3.3 completion note. | Owner |
-| 2026-07-21 | **PROPOSED (awaiting owner) — `TEngineHost` user-type creation ergonomics.** Follow-on from the 2026-07-21 `FindClass` row above: the Phase 3 goal states a hello-world app is ~20 lines, but `examples/HostLifecycle/Main.cpp` needs ~46 lines because each user type repeats a build-descriptor → `RegisterClass` → `FindClass` → `NewObject` dance. The minimal `FindClass` accessor was correct for 3.3 scope, but it leaves the canonical app verbose. Candidate (mirrors the existing `TEngineEnvironment::RegisterDerivedClass`/`CreateDerivedObject` test-fixture API, so there is precedent): add two `TEngineHost` template helpers — `template<typename T> EObjectResult RegisterClass(FTypeId, const char* Name)` that derives the parent from `T`'s base via the engine class ids, builds the descriptor with `&TraceManagedObjectReferences`, and registers it; and `template<typename T, typename... A> TObjectCreationResult<T> CreateObject(FTypeId, A&&...)` that folds `FindClass` + `NewObject` into one call. This would cut the hello-world body toward the ~20-line goal at the cost of more `TEngineHost` API surface (two more public templates) and one more place that encodes the "which base parent" rule. Options: (a) add both helpers as a new **Phase 3.4** task (keeps Phase 3 closed; small, testable, documented); (b) defer to Phase 6 (examples/measurement) where the ergonomics gap is felt most and can be judged against real ESP32 apps; (c) do not add — keep `FindClass` as the only public creation path and accept the verbosity as a one-time setup cost. | PROPOSED |
+| 2026-07-21 | **RESOLVED — owner chose option (a): add both helpers as Phase 3.4.** **PROPOSED (awaiting owner) — `TEngineHost` user-type creation ergonomics.** Follow-on from the 2026-07-21 `FindClass` row above: the Phase 3 goal states a hello-world app is ~20 lines, but `examples/HostLifecycle/Main.cpp` needs ~46 lines because each user type repeats a build-descriptor → `RegisterClass` → `FindClass` → `NewObject` dance. The minimal `FindClass` accessor was correct for 3.3 scope, but it leaves the canonical app verbose. Candidate (mirrors the existing `TEngineEnvironment::RegisterDerivedClass`/`CreateDerivedObject` test-fixture API, so there is precedent): add two `TEngineHost` template helpers — `template<typename T> EObjectResult RegisterClass(FTypeId, const char* Name)` that derives the parent from `T`'s base via the engine class ids, builds the descriptor with `&TraceManagedObjectReferences`, and registers it; and `template<typename T, typename... A> TObjectCreationResult<T> CreateObject(FTypeId, A&&...)` that folds `FindClass` + `NewObject` into one call. This would cut the hello-world body toward the ~20-line goal at the cost of more `TEngineHost` API surface (two more public templates) and one more place that encodes the "which base parent" rule. Options: (a) add both helpers as a new **Phase 3.4** task (keeps Phase 3 closed; small, testable, documented); (b) defer to Phase 6 (examples/measurement) where the ergonomics gap is felt most and can be judged against real ESP32 apps; (c) do not add — keep `FindClass` as the only public creation path and accept the verbosity as a one-time setup cost. | Owner |
 
 Add a row here whenever a task forces a design choice not covered by this plan.
 
@@ -1138,7 +1168,7 @@ of its tasks starts, ✅ only when all its tasks are `[x]`.
 | 0 | Baseline & governance | 0.1–0.2 | ✅ |
 | 1 | Consolidation: one Actor model | 1.1–1.4 | ✅ |
 | 2 | Runtime Spawn & Destroy | 2.1–2.4 | ✅ |
-| 3 | Composition root & logging | 3.1–3.3 | ✅ |
+| 3 | Composition root & logging | 3.1–3.4 | ✅ |
 | 4 | Networking with roles | 4.1–4.4 | ⬜ |
 | 5 | Platform adapters | 5.1–5.3 | ⬜ |
 | 6 | Examples, measurement, release | 6.1–6.4 | ⬜ |

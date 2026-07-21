@@ -1,11 +1,9 @@
 #include <MicroWorld/Engine/Actor.h>
 #include <MicroWorld/Engine/ActorComponent.h>
-#include <MicroWorld/Engine/EngineClassIds.h>
 #include <MicroWorld/Engine/EngineHost.h>
 #include <MicroWorld/Engine/EngineResult.h>
 #include <MicroWorld/Engine/InlineTypes.h>
 #include <MicroWorld/Object/ClassDescriptor.h>
-#include <MicroWorld/Object/Object.h>
 #include <MicroWorld/Object/ObjectPtr.h>
 
 #include <cstddef>
@@ -76,20 +74,17 @@ int main()
 	using FDeviceHost = TEngineHost<5, 3, 512, 16, 1, 1, 1, 32>;
 	FDeviceHost Host{FGarbageCollectionBudget{1, 4, 8}};
 
-	// Child descriptors must reference the registry's own parent copies; the host owns them after
-	// RegisterClass, so callers build and pass descriptors locally then look them up by id.
-	const FClassDescriptor DeviceDescriptor =
-		MakeClassDescriptor<FDeviceActor>(DeviceActorTypeId, "DeviceActor", Host.FindClass(AActorClassId), &TraceManagedObjectReferences);
-	const FClassDescriptor SensorDescriptor = MakeClassDescriptor<FSensorComponent>(
-		SensorComponentTypeId, "SensorComponent", Host.FindClass(UActorComponentClassId), &TraceManagedObjectReferences);
-	if (Host.RegisterClass(DeviceDescriptor) != EObjectResult::Success || Host.RegisterClass(SensorDescriptor) != EObjectResult::Success)
+	// RegisterClass<T> derives each parent from the engine base and registers the descriptor; the
+	// host still owns the canonical copy, so CreateObject<T> looks it up by id before constructing.
+	if (Host.RegisterClass<FDeviceActor>(DeviceActorTypeId, "DeviceActor") != EObjectResult::Success
+		|| Host.RegisterClass<FSensorComponent>(SensorComponentTypeId, "SensorComponent") != EObjectResult::Success)
 	{
 		return 1;
 	}
 
 	const TObjectPtr<UWorld> World = Host.CreateWorld();
-	const TObjectPtr<FDeviceActor> Device = Host.NewObject<FDeviceActor>(*Host.FindClass(DeviceActorTypeId)).Object;
-	const TObjectPtr<FSensorComponent> Sensor = Host.NewObject<FSensorComponent>(*Host.FindClass(SensorComponentTypeId)).Object;
+	const TObjectPtr<FDeviceActor> Device = Host.CreateObject<FDeviceActor>(DeviceActorTypeId).Object;
+	const TObjectPtr<FSensorComponent> Sensor = Host.CreateObject<FSensorComponent>(SensorComponentTypeId).Object;
 	if (World.Get() == nullptr || Device.Get() == nullptr || Sensor.Get() == nullptr)
 	{
 		return 1;

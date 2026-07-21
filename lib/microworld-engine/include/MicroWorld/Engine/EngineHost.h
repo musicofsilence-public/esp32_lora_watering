@@ -16,6 +16,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <type_traits>
 #include <utility>
 
 namespace MicroWorld
@@ -77,6 +78,50 @@ public:
 	 * against the registry's copy rather than the descriptor the caller registered.
 	 */
 	const FClassDescriptor* FindClass(const FTypeId TypeId) const noexcept { return Registry.Find(TypeId); }
+
+	/**
+	 * Registers a user type by deriving its parent from T's engine base (AActor,
+	 * UActorComponent, or UWorld) and building the descriptor with the shared managed
+	 * tracer, so callers register in one line instead of hand-building a descriptor.
+	 * Handles single-level derivation from an engine base; a deeper user hierarchy
+	 * must use the descriptor overload with an explicit FindClass parent.
+	 */
+	template<typename T>
+	EObjectResult RegisterClass(const FTypeId TypeId, const char* const Name) noexcept
+	{
+		const FClassDescriptor* Parent = nullptr;
+		if constexpr (std::is_base_of<AActor, T>::value)
+		{
+			Parent = Registry.Find(AActorClassId);
+		}
+		else if constexpr (std::is_base_of<UActorComponent, T>::value)
+		{
+			Parent = Registry.Find(UActorComponentClassId);
+		}
+		else if constexpr (std::is_base_of<UWorld, T>::value)
+		{
+			Parent = Registry.Find(UWorldClassId);
+		}
+		const FClassDescriptor Candidate =
+			MakeClassDescriptor<T>(TypeId, Name, Parent, &TraceManagedObjectReferences);
+		return Registry.Register(Candidate);
+	}
+
+	/**
+	 * Constructs a registered user type by folding FindClass and NewObject into one
+	 * call, so callers create an instance by type id without repeating the lookup.
+	 * Returns an UnknownClass result with a null object if the id was never registered.
+	 */
+	template<typename T, typename... TArguments>
+	TObjectCreationResult<T> CreateObject(const FTypeId TypeId, TArguments&&... Arguments) noexcept
+	{
+		const FClassDescriptor* const Descriptor = FindClass(TypeId);
+		if (Descriptor == nullptr)
+		{
+			return TObjectCreationResult<T>{EObjectResult::UnknownClass, {}};
+		}
+		return Store.NewObject<T>(*Descriptor, std::forward<TArguments>(Arguments)...);
+	}
 
 	/**
 	 * Constructs the single UWorld in the store and roots it, returning the world

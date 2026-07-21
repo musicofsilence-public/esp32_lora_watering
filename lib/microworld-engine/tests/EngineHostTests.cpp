@@ -35,6 +35,7 @@ using MicroWorld::MakeClassDescriptor;
 using MicroWorld::TDelegate;
 using MicroWorld::TEngineHost;
 using MicroWorld::TObjectPtr;
+using MicroWorld::TObjectCreationResult;
 using MicroWorld::TraceManagedObjectReferences;
 using MicroWorld::UActorComponent;
 using MicroWorld::UActorComponentClassId;
@@ -395,4 +396,68 @@ MW_TEST_CASE(EngineHostCreateWorldIsSingleShot)
 	MW_EXPECT_TRUE(Test, SecondWorld.Get() == nullptr, "A second CreateWorld returns an empty reference without replacing the world");
 
 	MW_EXPECT_TRUE(Test, &Host.GetWorld() == FirstWorld.Get(), "GetWorld still refers to the first world after the rejected second creation");
+}
+
+/**
+ * Proves the RegisterClass<T>/CreateObject<T> ergonomics helpers register, construct,
+ * and wire user types end to end so the descriptors they build participate in both
+ * validation and reference tracing just like hand-built descriptors do.
+ */
+MW_TEST_CASE(EngineHostTemplateHelpersRegisterAndConstructUserTypes)
+{
+	FSequenceCounter Sequence{};
+	FActorEventState ActorEvents{};
+	FComponentEventState ComponentEvents{};
+	MicroWorld::FActorComponentRegistry<2> ActorComponents{};
+	FHost Host{FGarbageCollectionBudget{1, 4, 8}};
+
+	MW_EXPECT_EQ(Test, EObjectResult::Success, Host.RegisterClass<FHostActor>(HostActorTypeId, "HostActor"), "RegisterClass<FHostActor> derives the actor parent and reports success");
+	MW_EXPECT_EQ(Test, EObjectResult::Success, Host.RegisterClass<FHostComponent>(HostComponentTypeId, "HostComponent"), "RegisterClass<FHostComponent> derives the component parent and reports success");
+
+	const TObjectPtr<UWorld> World = Host.CreateWorld();
+	MW_EXPECT_TRUE(Test, World.Get() != nullptr, "CreateWorld roots the world after the helpers register user types");
+
+	const TObjectCreationResult<FHostActor> Actor =
+		Host.CreateObject<FHostActor>(HostActorTypeId, ActorComponents.MakeView(), Sequence, ActorEvents);
+	const TObjectCreationResult<FHostComponent> Component =
+		Host.CreateObject<FHostComponent>(HostComponentTypeId, Sequence, ComponentEvents);
+	MW_EXPECT_EQ(Test, EObjectResult::Success, Actor.Result, "CreateObject<FHostActor> constructs the actor through the helper-registered descriptor");
+	MW_EXPECT_EQ(Test, EObjectResult::Success, Component.Result, "CreateObject<FHostComponent> constructs the component through the helper-registered descriptor");
+	MW_EXPECT_TRUE(Test, Actor.Object.Get() != nullptr, "CreateObject<FHostActor> returns a non-null actor handle");
+	MW_EXPECT_TRUE(Test, Component.Object.Get() != nullptr, "CreateObject<FHostComponent> returns a non-null component handle");
+
+	MW_EXPECT_EQ(Test, EEngineResult::Success, Actor.Object.Get()->RegisterComponent(Component.Object), "The helper-constructed component attaches to the helper-constructed actor");
+	MW_EXPECT_EQ(Test, EEngineResult::Success, Host.GetWorld().RegisterActor(TObjectPtr<AActor>{Actor.Object}), "The helper-constructed actor registers with the world");
+
+	MW_EXPECT_EQ(Test, ERuntimeResult::Success, Host.BeginPlay(0), "BeginPlay reports success at the helper-driven baseline");
+	MW_EXPECT_EQ(Test, ERuntimeResult::Success, Host.Tick(10), "Tick at 10 ms reports success through the helper-registered actor");
+	MW_EXPECT_EQ(Test, ERuntimeResult::Success, Host.Tick(20), "Tick at 20 ms reports success through the helper-registered actor");
+	MW_EXPECT_EQ(Test, ERuntimeResult::Success, Host.Tick(30), "Tick at 30 ms reports success through the helper-registered actor");
+	MW_EXPECT_EQ(Test, ERuntimeResult::Success, Host.EndPlay(), "EndPlay reports success after the helper-driven frame schedule");
+
+	MW_EXPECT_EQ(Test, std::uint32_t{1}, ActorEvents.BeginCount, "The helper-registered actor begins exactly once");
+	MW_EXPECT_EQ(Test, std::uint32_t{3}, ActorEvents.TickCount, "The helper-registered actor ticks once per frame");
+	MW_EXPECT_EQ(Test, std::uint32_t{1}, ActorEvents.EndCount, "The helper-registered actor ends exactly once");
+	MW_EXPECT_EQ(Test, std::uint32_t{1}, ComponentEvents.BeginCount, "The helper-registered component begins exactly once");
+	MW_EXPECT_EQ(Test, std::uint32_t{3}, ComponentEvents.TickCount, "The helper-registered component ticks once per frame");
+	MW_EXPECT_EQ(Test, std::uint32_t{1}, ComponentEvents.EndCount, "The helper-registered component ends exactly once");
+	MW_EXPECT_TRUE(Test, ComponentEvents.BeginOrder < ActorEvents.BeginOrder, "The helper-registered component begins before its actor");
+	MW_EXPECT_TRUE(Test, ActorEvents.EndOrder < ComponentEvents.EndOrder, "The helper-registered actor ends before its component");
+}
+
+/** Proves CreateObject<T> rejects an unregistered type id with UnknownClass and a null handle. */
+MW_TEST_CASE(EngineHostCreateObjectRejectsUnregisteredType)
+{
+	FHost Host{FGarbageCollectionBudget{1, 4, 8}};
+
+	const TObjectPtr<UWorld> World = Host.CreateWorld();
+	MW_EXPECT_TRUE(Test, World.Get() != nullptr, "CreateWorld roots the world before an unregistered construction is attempted");
+
+	// FHostPlainComponent is the suite's default-constructible component; the lookup below fails
+	// before any construction, so the type only needs to satisfy the store's noexcept constructible
+	// contract, not match the recording component's two-argument constructor.
+	constexpr FTypeId UnregisteredComponentTypeId{0x00069999u};
+	const TObjectCreationResult<FHostPlainComponent> Component = Host.CreateObject<FHostPlainComponent>(UnregisteredComponentTypeId);
+	MW_EXPECT_EQ(Test, EObjectResult::UnknownClass, Component.Result, "CreateObject reports UnknownClass for an id that was never registered");
+	MW_EXPECT_TRUE(Test, Component.Object.Get() == nullptr, "CreateObject returns a null handle for an unregistered id");
 }
