@@ -89,6 +89,7 @@ if(MICROWORLD_NET_BUILD_TESTS)
         "${CMAKE_CURRENT_SOURCE_DIR}/tests/HostLoopbackTests.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/tests/NetManagerTests.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/tests/NetProtocolTests.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests/NetHostTests.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/tests/NetAllocationTests.cpp"
     )
 

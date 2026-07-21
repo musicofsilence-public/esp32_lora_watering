@@ -1097,7 +1097,7 @@ via `ENetHostState GetState() const noexcept`.
   `lib/microworld-net/CMakeLists.txt`, `MICROWORLD_ROADMAP.md`. No
   `PROGRESS.md` row. Task 4.3 not started.
 
-- [ ] **4.3 `TNetHost` with roles.** Implement per the design. Tests (over
+- [x] **4.3 `TNetHost` with roles.** Implement per the design. Tests (over
   multi-endpoint loopback): server admits client (Hello→Welcome), peer table
   capacity rejection, heartbeat keeps peer alive, missed heartbeats evict,
   stale `FPeerId` rejected after eviction, client reconnect gets new
@@ -1108,6 +1108,33 @@ via `ENetHostState GetState() const noexcept`.
 
   **Verify:** net package build + tests.
   **Done when:** every listed behavior has a passing case.
+
+  **Completed (2026-07-21):** Added header-only `Net/NetHost.h` with
+  `TNetHost<MaxPeers, MaxPacketBytes>`, `ENetMode`, `ENetHostState`,
+  `FNetHostConfig`, `FPeerId` (generation-checked), and an internal
+  `FNetPeerSlot`. Constructor-injects the driver (`explicit TNetHost(INetDriver&)`)
+  and takes mode/config via `Configure(ENetMode, const FNetHostConfig&)` — an
+  approved, documented deviation from the spec's `Configure(driver)` that lets the
+  host own an `FNetManager` as a plain member (DRY; no deferred-construction
+  machinery). Reuses 4.2's `NetProtocol` framing and 4.1's `FNetManager`/`FHostLoopback`.
+  Tick-driven (`PumpReceive`/`PumpSend`, no hidden clock); channel 0 handled
+  internally (admission, heartbeats, timeout eviction), channels 1..255 dispatch
+  to one bounded `TMulticastDelegate`. `PumpReceive` is bounded to `MaxPeers + 4`
+  receives per call; `ListenServer` owns a sentinel local peer dispatched directly
+  without the driver; `Stop()` sends best-effort `Bye`; version-mismatch and
+  unknown/malformed control log via `MW_LOG` and take no action. Added 18
+  behavioral cases in `tests/NetHostTests.cpp` (one per listed behavior plus the
+  Idle→Connecting→Connected machine, repeated-Hello idempotency, `Bye` eviction,
+  unknown-control drop, exactly-once delivery, and a no-allocation full session)
+  over `FHostLoopback`, using a small counting mock driver to prove the pump bound.
+  Verify evidence: clean GCC 16.1.0 build (zero warnings), `ctest` 1/1 Passed,
+  runner `[SUMMARY] 93 tests, 0 failures` (>75 from 4.2), CheckClassDocumentation
+  passed (20 files), CheckDependencyBoundaries passed (1 package, 11 files),
+  `clang-format --style=file:clang-format --dry-run --Werror` exit 0 (clean). Files
+  changed: `lib/microworld-net/include/MicroWorld/Net/NetHost.h` (new),
+  `lib/microworld-net/tests/NetHostTests.cpp` (new),
+  `lib/microworld-net/CMakeLists.txt`, `MICROWORLD_ROADMAP.md`. No `PROGRESS.md`
+  row (phase not yet ✅). Task 4.4 not started.
 
 - [ ] **4.4 Wire `TNetHost` into `TEngineHost`.** Optional slot: a
   `TEngineHost` constructor overload accepts a `TNetHost&` (caller-owned) and
