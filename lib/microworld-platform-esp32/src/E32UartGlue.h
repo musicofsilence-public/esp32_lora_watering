@@ -24,12 +24,6 @@ namespace MicroWorld::Detail
 /** UART port number type matching the ESP-IDF enum so call sites need no implicit conversion. */
 using FUartPort = uart_port_t;
 
-/** Largest single-transmission payload the configured E32 module is assumed to accept. */
-constexpr std::size_t E32UartMaxPayloadBytes = 58;
-
-/** Fixed framing overhead in bytes for one E32 LoRa frame. */
-constexpr std::size_t E32UartFrameOverheadBytes = 6;
-
 /**
  * Reinterprets the opaque stored port number as its ESP-IDF UART port type.
  *
@@ -129,9 +123,11 @@ struct FOpenedUart
  * Configures and installs one UART for 8N1 E32 LoRa traffic.
  *
  * Sets the UART to 8N1 at the given baud rate, routes it to the given TX/RX GPIOs with no hardware flow
- * control, and installs the ESP-IDF driver with bounded RX and TX buffers. On any configuration failure the
- * partially installed driver is uninstalled and `bOpen` is false, so the constructor can leave the driver
- * inert without throwing. The exact buffer sizing is a compile-time placeholder pending measured E32 latency.
+ * control, and installs the ESP-IDF driver with RX and TX ring buffers of two hardware FIFOs so the install
+ * clears the ESP-IDF minimum (both must exceed `UART_HW_FIFO_LEN`). On any configuration failure the partially
+ * installed driver is uninstalled and `bOpen` is false, so the constructor can leave the driver inert without
+ * throwing. The ring-buffer headroom suits LoRa baud between receive pumps; airtime-tuned sizing is deferred
+ * to measured bring-up.
  *
  * @param Port UART port number to open.
  * @param TxGpio TX GPIO number wired to the E32 module's RX pin.
@@ -157,10 +153,11 @@ inline FOpenedUart OpenConfiguredUartPort(
 	{
 		return FOpenedUart{false};
 	}
-	// Bounded RX/TX buffers sized generously for one full frame; tuned pending measured E32 airtime.
-	if (uart_driver_install(
-			Port, 2 * (E32UartMaxPayloadBytes + E32UartFrameOverheadBytes), 2 * (E32UartMaxPayloadBytes + E32UartFrameOverheadBytes), 0, nullptr, 0)
-		!= ESP_OK)
+	// ESP-IDF requires the RX ring buffer to exceed the hardware FIFO and the TX ring buffer to be zero or
+	// exceed it (esp_driver_uart/src/uart.c); a nonzero TX buffer also keeps uart_write_bytes non-blocking.
+	// Two hardware FIFOs clears that floor with headroom for one E32 frame at LoRa baud between pumps.
+	const int RingBufferBytes = 2 * UART_HW_FIFO_LEN(Port);
+	if (uart_driver_install(Port, RingBufferBytes, RingBufferBytes, 0, nullptr, 0) != ESP_OK)
 	{
 		return FOpenedUart{false};
 	}
