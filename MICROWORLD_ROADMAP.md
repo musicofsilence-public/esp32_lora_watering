@@ -1176,12 +1176,12 @@ via `ENetHostState GetState() const noexcept`.
 
 ---
 
-### Phase 5 — Platform adapters (ESP32 + host) ⬜
+### Phase 5 — Platform adapters (ESP32 + host) 🟨
 
 Goal: MicroWorld runs on the real board. New packages; portable packages stay
 platform-free (dependency checker must keep passing).
 
-- [ ] **5.1 `microworld-platform-host` package.** `lib/microworld-platform-host/`
+- [x] **5.1 `microworld-platform-host` package.** `lib/microworld-platform-host/`
   with: `FHostTimeSource` (steady_clock → ms since start) and
   `FHostUdpDriver` implementing `INetDriver` v2 over BSD/WinSock UDP
   (non-blocking sockets; `FNetAddress` = IPv4 + port). CMake + tests (two
@@ -1189,6 +1189,51 @@ platform-free (dependency checker must keep passing).
   `Invalid`/`Full` mapping documented and tested where the OS allows).
 
   **Done when:** a host demo sends `TNetHost` traffic over real UDP localhost.
+
+  **Completed (2026-07-21):** Added the first **non-portable** platform package
+  `lib/microworld-platform-host/`, excluded by design from
+  `CheckDependencyBoundaries.py` (it may include OS socket headers; the checker
+  governs only Core/Memory/Object/Engine/Net). Deliverables: `FHostTimeSource`
+  (header-only `steady_clock` → `TimePointMilliseconds`, the single real clock the
+  engine consumes), `MakeUdpAddress`/`IsUdpAddress`/`UdpAddressPort` (this
+  package's 6-byte IPv4+port encoding of the opaque `FNetAddress`, mirroring the
+  `MakeLoopbackAddress` precedent), `FWinSockScope` (refcounted RAII so N drivers
+  share one `WSAStartup`/`WSACleanup`; POSIX no-op; non-thread-safe by design),
+  and `FHostUdpDriver final : INetDriver` (one non-blocking `SOCK_DGRAM` on
+  `127.0.0.1`, ephemeral port via bind-0 + `getsockname`). All OS socket headers
+  are confined to `src/UdpSocketGlue.h` (the sole home of `<winsock2.h>` /
+  `<sys/socket.h>`); the four public headers stay platform-free. Every op is
+  transactional — arguments validated before any syscall, `BytesReceived`/`OutFrom`
+  left unchanged on any non-`Success`; the receive path peeks (`MSG_PEEK`,
+  `WSAEMSGSIZE`/`MSG_TRUNC`) to size the head datagram without consuming, so `Full`
+  leaves it queued. The Done-when proof
+  (`HostNetHandshakeAndApplicationMessageCrossRealUdp`) drives two `TNetHost<4,256>`
+  over two `FHostUdpDriver` on localhost: the client reaches `Connected`, the server
+  admits one peer, then one channel-1 app message dispatches server-side with the
+  exact bytes. Driver contract tests cover two distinct ephemeral sockets, a full
+  byte/exact-sender round trip, `Unavailable` on empty, `Invalid` (null-span-nonzero,
+  oversize, non-UDP address), transactional `Full` (queue-not-consumed proven by a
+  later larger read), and `MaxPacketBytes()==1200`. Note: the concept doc's "~1200
+  byte" `MaxPacketBytes` is honored literally; the end-to-end test's app payload is
+  kept well under 256 so real UDP datagrams never exceed the `TNetHost<4,256>`
+  `PumpReceive` scratch buffer. POSIX glue is compiled behind `#ifdef` but
+  unverified on this Windows-only host (deferred to 5.2's POSIX-like build).
+  Verify evidence: clean GCC 16.1.0 build (zero warnings), `ctest` 1/1 Passed,
+  runner `[SUMMARY] 7 tests, 0 failures`, CheckClassDocumentation passed (9 files),
+  CheckDependencyBoundaries passed (5 packages, 51 files — platform-host excluded
+  by design), `clang-format --style=file:clang-format --dry-run --Werror` exit 0
+  (clean). Files changed:
+  `lib/microworld-platform-host/include/MicroWorld/PlatformHost/HostTimeSource.h` (new),
+  `lib/microworld-platform-host/include/MicroWorld/PlatformHost/UdpAddress.h` (new),
+  `lib/microworld-platform-host/include/MicroWorld/PlatformHost/WinSockScope.h` (new),
+  `lib/microworld-platform-host/include/MicroWorld/PlatformHost/HostUdpDriver.h` (new),
+  `lib/microworld-platform-host/src/HostUdpDriver.cpp` (new),
+  `lib/microworld-platform-host/src/UdpSocketGlue.h` (new),
+  `lib/microworld-platform-host/tests/HostTimeSourceTests.cpp` (new),
+  `lib/microworld-platform-host/tests/HostUdpDriverTests.cpp` (new),
+  `lib/microworld-platform-host/tests/HostNetEndToEndTests.cpp` (new),
+  `lib/microworld-platform-host/CMakeLists.txt` (new), `MICROWORLD_ROADMAP.md`.
+  No `PROGRESS.md` row (phase not yet ✅). Tasks 5.2–5.3 not started.
 
 - [ ] **5.2 `microworld-platform-esp32` package.** `lib/microworld-platform-esp32/`
   (ESP-IDF component style, PlatformIO-compatible like the existing consumer
@@ -1263,6 +1308,7 @@ platform-free (dependency checker must keep passing).
 | 2026-07-21 | **RESOLVED — `TEngineHost` needs a descriptor lookup.** Surfaced writing 3.3: the 3.2 spec exposed `RegisterClass` but no lookup, and the object store's construction validation requires the descriptor passed to `NewObject` to be the registry's OWN copy (identity check) with `Parent` pointing at the registry's own parent copy (`HasValidParentChain`). Without a lookup, user actors/components cannot be created through the host — which 3.3 requires. Chose **option (a)** (minimal): add one public `const FClassDescriptor* TEngineHost::FindClass(FTypeId) const noexcept` that forwards to `TClassRegistry::Find`, matching how `TEngineEnvironment::FindDescriptor` already exposes the same access for the test fixture. Rejected: (b) variadic auto-register-and-construct helper (`Host.NewObject<FDeviceActor>(id, name, parent_id, ...)` that registers + looks up + constructs in one call) — convenient but hides the descriptor-identity invariant behind a magic helper and over-reaches the 3.2 scope. Applied in the same 3.3 commit; noted in the 3.3 completion note. | Owner |
 | 2026-07-21 | **RESOLVED — `TEngineHost` user-type creation ergonomics; owner chose option (a) (add both helpers as Phase 3.4).** Follow-on from the 2026-07-21 `FindClass` row above: the Phase 3 goal states a hello-world app is ~20 lines, but `examples/HostLifecycle/Main.cpp` needs ~46 lines because each user type repeats a build-descriptor → `RegisterClass` → `FindClass` → `NewObject` dance. The minimal `FindClass` accessor was correct for 3.3 scope, but it leaves the canonical app verbose. Candidate (mirrors the existing `TEngineEnvironment::RegisterDerivedClass`/`CreateDerivedObject` test-fixture API, so there is precedent): add two `TEngineHost` template helpers — `template<typename T> EObjectResult RegisterClass(FTypeId, const char* Name)` that derives the parent from `T`'s base via the engine class ids, builds the descriptor with `&TraceManagedObjectReferences`, and registers it; and `template<typename T, typename... A> TObjectCreationResult<T> CreateObject(FTypeId, A&&...)` that folds `FindClass` + `NewObject` into one call. This would cut the hello-world body toward the ~20-line goal at the cost of more `TEngineHost` API surface (two more public templates) and one more place that encodes the "which base parent" rule. Options: (a) add both helpers as a new **Phase 3.4** task (keeps Phase 3 closed; small, testable, documented); (b) defer to Phase 6 (examples/measurement) where the ergonomics gap is felt most and can be judged against real ESP32 apps; (c) do not add — keep `FindClass` as the only public creation path and accept the verbosity as a one-time setup cost. | Owner |
 | 2026-07-21 | **Phase 4.1 loopback object model + `FNetAddress` encoding.** The v2 `INetDriver::TryReceive(FNetAddress& OutFrom, …)` carries no per-call endpoint identity, so a single shared loopback object cannot know which mailbox to drain. Chose the **shared-mailroom** model (owner): one `FHostLoopback<MaxPorts, MailboxCapacity, PacketBytes>` owns N per-port mailboxes AND N embedded per-port `INetDriver`s; `INetDriver& Port(index)` hands out the driver bound to a 1-byte loopback address equal to that port index. Two hosts share one network and each hold their own `Port(i)` — fits 4.3/4.4's one-driver-per-host wiring, and port lifetimes are automatic (ports live inside the network). Rejected: fabric + separately-constructed endpoint objects (adds a caller lifetime-ordering landmine); peer-linked mesh (O(N²) wiring). `FNetAddress` = `std::array<uint8_t,12> Bytes` + `uint8_t Size` + `==`/`!=`; loopback encodes exactly one byte = the port index. Internal decomposition: a `Detail::FLoopbackMailboxes` holds the FIFOs + routing so each per-port driver stores only a complete-type pointer (avoids the nested-in-incomplete-template pitfall). | Owner |
+| 2026-07-21 | **Phase 5.1 first non-portable platform package; UDP address encoding; transactional Full.** Three decisions lifted from `.claude/concepts/platform-host-udp.md`: (1) `microworld-platform-host` is a **non-portable platform package** — excluded from `CheckDependencyBoundaries.py` (no `platform-host` module key; OS socket headers would fail the vendor rule anyway), may include OS socket headers; (2) the UDP `FNetAddress` encoding is 6 bytes (4 IPv4 octets + 2 big-endian port bytes), owned by this package's `MakeUdpAddress`/`IsUdpAddress`/`UdpAddressPort` helpers since `FNetAddress` is deliberately opaque; (3) a receive into a too-small destination returns `Full` **without consuming** the datagram via `MSG_PEEK` (`WSAEMSGSIZE`/`MSG_TRUNC`), keeping the `INetDriver` transactional contract — note the Windows sizing peek may write truncated bytes into the caller's buffer, so the load-bearing guarantee is `BytesReceived`/`OutFrom` unchanged plus queue-not-consumed, not destination-bytes-untouched. Cross-platform scope: both Windows + POSIX glue written now behind `#ifdef`; POSIX unverified on this Windows-only host (deferred to 5.2). | Owner |
 
 Add a row here whenever a task forces a design choice not covered by this plan.
 
@@ -1280,7 +1326,7 @@ of its tasks starts, ✅ only when all its tasks are `[x]`.
 | 2 | Runtime Spawn & Destroy | 2.1–2.4 | ✅ |
 | 3 | Composition root & logging | 3.1–3.4 | ✅ |
 | 4 | Networking with roles | 4.1–4.4 | ✅ |
-| 5 | Platform adapters | 5.1–5.3 | ⬜ |
+| 5 | Platform adapters | 5.1–5.3 | 🟨 |
 | 6 | Examples, measurement, release | 6.1–6.4 | ⬜ |
 
 **Definition of "production ready" (exit criteria):** Phase 6 task 6.4 checked;
