@@ -153,50 +153,54 @@ namespace Detail
 		}
 
 	private:
-	/** One bounded FIFO mailbox: fixed byte storage, per-slot length, per-slot sender, indices. */
-	struct FMailbox
-	{
-		/** Fixed per-packet byte storage; only the leading `PacketLengths[i]` bytes are valid. */
-		std::array<std::array<std::uint8_t, PacketBytes>, MailboxCapacity> PacketStorage{};
-
-		/** Records the valid byte length of each queued packet so receives stay exact. */
-		std::array<std::size_t, MailboxCapacity> PacketLengths{};
-
-		/** Records the sender address stamped on each queued packet so receive can report it. */
-		std::array<FNetAddress, MailboxCapacity> SenderAddresses{};
-
-		/** Indexes the next packet to receive so the FIFO order is preserved. */
-		std::size_t HeadIndex{0};
-
-		/** Indexes the next free slot so delivers append without overwriting the head. */
-		std::size_t TailIndex{0};
-
-		/** Tracks occupancy so full and empty states are observable without wrap arithmetic. */
-		std::size_t QueuedCount{0};
-	};
-
-	/** Copies one accepted packet, its length, and its sender into the slot at `Index`. */
-	static void StorePacketAt(
-		FMailbox& Mailbox, const std::size_t Index, const FNetAddress& From, TSpan<const std::uint8_t> Packet, const std::size_t PacketSize) noexcept
-	{
-		if (PacketSize > 0)
+		/** One bounded FIFO mailbox: fixed byte storage, per-slot length, per-slot sender, indices. */
+		struct FMailbox
 		{
-			std::memcpy(Mailbox.PacketStorage[Index].data(), Packet.Data(), PacketSize);
+			/** Fixed per-packet byte storage; only the leading `PacketLengths[i]` bytes are valid. */
+			std::array<std::array<std::uint8_t, PacketBytes>, MailboxCapacity> PacketStorage{};
+
+			/** Records the valid byte length of each queued packet so receives stay exact. */
+			std::array<std::size_t, MailboxCapacity> PacketLengths{};
+
+			/** Records the sender address stamped on each queued packet so receive can report it. */
+			std::array<FNetAddress, MailboxCapacity> SenderAddresses{};
+
+			/** Indexes the next packet to receive so the FIFO order is preserved. */
+			std::size_t HeadIndex{0};
+
+			/** Indexes the next free slot so delivers append without overwriting the head. */
+			std::size_t TailIndex{0};
+
+			/** Tracks occupancy so full and empty states are observable without wrap arithmetic. */
+			std::size_t QueuedCount{0};
+		};
+
+		/** Copies one accepted packet, its length, and its sender into the slot at `Index`. */
+		static void StorePacketAt(
+			FMailbox& Mailbox,
+			const std::size_t Index,
+			const FNetAddress& From,
+			TSpan<const std::uint8_t> Packet,
+			const std::size_t PacketSize) noexcept
+		{
+			if (PacketSize > 0)
+			{
+				std::memcpy(Mailbox.PacketStorage[Index].data(), Packet.Data(), PacketSize);
+			}
+			Mailbox.PacketLengths[Index] = PacketSize;
+			Mailbox.SenderAddresses[Index] = From;
 		}
-		Mailbox.PacketLengths[Index] = PacketSize;
-		Mailbox.SenderAddresses[Index] = From;
-	}
 
-	/** Advances the tail and count after one accepted packet. */
-	static void AdvanceTail(FMailbox& Mailbox) noexcept
-	{
-		Mailbox.TailIndex = (Mailbox.TailIndex + 1) % MailboxCapacity;
-		++Mailbox.QueuedCount;
-	}
+		/** Advances the tail and count after one accepted packet. */
+		static void AdvanceTail(FMailbox& Mailbox) noexcept
+		{
+			Mailbox.TailIndex = (Mailbox.TailIndex + 1) % MailboxCapacity;
+			++Mailbox.QueuedCount;
+		}
 
-	/** The N caller-owned mailboxes, indexed by port. */
-	std::array<FMailbox, MaxPorts> Mailboxes{};
-};
+		/** The N caller-owned mailboxes, indexed by port. */
+		std::array<FMailbox, MaxPorts> Mailboxes{};
+	};
 
 } // namespace Detail
 
