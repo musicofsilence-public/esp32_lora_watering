@@ -1310,7 +1310,7 @@ platform-free (dependency checker must keep passing).
   `lib/microworld/tests/consumer/src/CMakeLists.txt`, `MICROWORLD_ROADMAP.md`.
   No `PROGRESS.md` row (phase not yet ✅). Task 5.3 not started.
 
-- [ ] **5.3 E32 LoRa UART driver.** `FEsp32E32LoraDriver` in the esp32 package:
+- [x] **5.3 E32 LoRa UART driver.** `FEsp32E32LoraDriver` in the esp32 package:
   UART framing `[u8 0xA5][u8 SrcNodeId][u16 Len][payload][u16 CRC16-CCITT]`,
   bounded RX state machine (resync on bad magic/CRC), `FNetAddress` = 1-byte
   node id, respects E32 payload limits via `MaxPacketBytes()`. Host-side unit
@@ -1321,6 +1321,74 @@ platform-free (dependency checker must keep passing).
 
   **Done when:** FrameCodec host tests pass; esp32 package compiles with the
   driver; no radio transmission performed.
+
+  **Completed (2026-07-21):** Added the E32 LoRa transport in two parts per the
+  task spec. **Part A — portable framer in `microworld-net`:** header-only
+  `Net/FrameCodec.h` with `ComputeCrc16Ccitt` (CRC-16/CCITT-FALSE: poly
+  `0x1021`, init `0xFFFF`, no input/output reflection, xorout `0x0000`;
+  canonical check value 0x29B1 asserted), the transactional free function
+  `EncodeFrame` (validates before writing; `Invalid` for null-span-nonzero,
+  `Full` when the payload cannot fit the destination or the u16 length field;
+  leaves `OutFrame` and `OutWritten` unchanged on any non-`Success`), the
+  `EFrameEvent` enum (`None`/`FrameReady`/`Discarded`), and the bounded
+  `TFrameDecoder<MaxPayloadBytes>` template state machine
+  (`WaitingForMagic → ReadingSrcNodeId → ReadingLenHi → ReadingLenLo →
+  ReadingPayload → ReadingCrcHi → ReadingCrcLo`) that accumulates the CRC
+  incrementally over the source node id, both length bytes, and each payload
+  byte, resyncing to `WaitingForMagic` on a non-magic byte, an oversize
+  declared length, or a CRC mismatch. The resync guarantee and its honest
+  truncation non-guarantee (the frame immediately after a truncated frame may
+  be consumed as that frame's payload and lost, recovering within one frame)
+  are documented in the class contract. Nine host cases in
+  `tests/FrameCodecTests.cpp`: the canonical CRC check value, encode→decode
+  round trips for payload sizes 0/1/Max including a `0xA5` payload byte,
+  transactional `Invalid`/`Full` rejection with `OutWritten` unchanged, leading
+  non-magic garbage then a valid frame, two back-to-back frames in order, a
+  corrupted CRC byte discarded then a valid frame, an oversize declared length
+  discarded then a valid frame, the documented truncated-frame resync, and a
+  steady-state no-allocation round trip. `FrameCodec.h` depends only on
+  Core/Memory/std so `CheckDependencyBoundaries` stays green. **Part B — ESP32
+  UART glue in `microworld-platform-esp32`:** `LoraAddress.h` (the 1-byte LoRa
+  `FNetAddress` encoding mirroring `UdpAddress.h`), `Esp32E32LoraDriver.h`
+  (`class FEsp32E32LoraDriver final : INetDriver` with a `FEsp32E32LoraConfig`
+  struct, `E32MaxPayloadBytes == 58`, a held-by-value `TFrameDecoder`, and a
+  platform-free public header), `src/Esp32E32LoraDriver.cpp`
+  (validate-then-syscall; `TrySend` encodes into a stack buffer then maps the
+  glue outcome `Sent→Success / WouldBlock→Full / Error→Invalid`; `TryReceive`
+  delivers a held frame first, else pumps the UART one byte at a time bounded
+  by `2*(E32MaxPayloadBytes+FrameOverheadBytes)`, logging a `Discarded` and
+  continuing), and `src/E32UartGlue.h` (the SOLE home of `<driver/uart.h>`;
+  `namespace MicroWorld::Detail`; `FUartPort = uart_port_t` so call sites need
+  no implicit conversion; outcome enums `EUartWriteOutcome`/
+  `EUartReadStatus`; `OpenConfiguredUartPort` 8N1 with rollback-on-failure; the
+  exact would-block/drain behavior documented as runtime-UNVERIFIED in the
+  compile-only phase, mirroring the 5.2 UDP `MSG_TRUNC` caveat). The LoRa
+  addressing model is documented as broadcast: the frame carries only the
+  sender's node id, `To` is validated but the wire is broadcast, and
+  per-destination routing is a higher-layer concern. The Done-when proof
+  extends `PlatformEsp32Main.cpp` to additionally construct one
+  `FEsp32E32LoraDriver` (UART_NUM_1, GPIO17/18, 9600 baud, node 1) so the
+  driver object compiles and links; it is NOT ticked (compile-only; no UART
+  traffic, no radio, no upload). The existing UDP composition is untouched.
+  Verify evidence: clean GCC 16.1.0 host build (zero warnings), `ctest` 1/1
+  Passed, runner `[SUMMARY] 102 tests, 0 failures` (+9 FrameCodec cases over
+  5.2's 93); clean Xtensa-ESP-ELF GCC 15.2.0 build, `esp32-s3-platform`
+  `[SUCCESS]` in 7.23 s, **RAM 21,804 / 327,680 bytes (6.7%)**, **Flash
+  309,921 / 4,194,304 bytes (7.4%)** (+32 bytes RAM, +26,448 bytes flash over
+  the 5.2 UDP-only image); `CheckClassDocumentation.py` passed (Net 22 files,
+  platform-esp32 11 files); `CheckDependencyBoundaries.py` passed (5 packages,
+  52 files — platform-esp32 excluded by design); `clang-format --style=file:
+  clang-format --dry-run --Werror` exit 0. Files changed:
+  `lib/microworld-net/include/MicroWorld/Net/FrameCodec.h` (new),
+  `lib/microworld-net/tests/FrameCodecTests.cpp` (new),
+  `lib/microworld-net/CMakeLists.txt`,
+  `lib/microworld-platform-esp32/include/MicroWorld/PlatformEsp32/LoraAddress.h` (new),
+  `lib/microworld-platform-esp32/include/MicroWorld/PlatformEsp32/Esp32E32LoraDriver.h` (new),
+  `lib/microworld-platform-esp32/src/Esp32E32LoraDriver.cpp` (new),
+  `lib/microworld-platform-esp32/src/E32UartGlue.h` (new),
+  `lib/microworld-platform-esp32/library.json`,
+  `lib/microworld/tests/consumer/src/PlatformEsp32Main.cpp`, `MICROWORLD_ROADMAP.md`.
+  PROGRESS.md Phase 5 row added below. Phase 5 (5.1–5.3) complete.
 
 ---
 
@@ -1370,6 +1438,8 @@ platform-free (dependency checker must keep passing).
 | 2026-07-21 | **Phase 5.1 first non-portable platform package; UDP address encoding; transactional Full.** Three decisions lifted from `.claude/concepts/platform-host-udp.md`: (1) `microworld-platform-host` is a **non-portable platform package** — excluded from `CheckDependencyBoundaries.py` (no `platform-host` module key; OS socket headers would fail the vendor rule anyway), may include OS socket headers; (2) the UDP `FNetAddress` encoding is 6 bytes (4 IPv4 octets + 2 big-endian port bytes), owned by this package's `MakeUdpAddress`/`IsUdpAddress`/`UdpAddressPort` helpers since `FNetAddress` is deliberately opaque; (3) a receive into a too-small destination returns `Full` **without consuming the datagram or touching the caller's destination** — the sizing peek reads into an internal 1200-byte scratch (`MSG_PEEK`+`MSG_TRUNC` on POSIX returns the true length; Windows `MSG_PEEK` returns the delivered length and `WSAEMSGSIZE` becomes a sentinel "does not fit"), so the single fits-vs-`Full` decision in the driver sees one uniform signal and the `INetDriver` transactional contract holds on both platforms. Cross-platform scope: both Windows + POSIX glue written now behind `#ifdef`; POSIX unverified on this Windows-only host (deferred to 5.2). | Owner |
 | 2026-07-21 | **Phase 5.2 second non-portable platform package; intentionally duplicated UDP address encoding.** (1) `microworld-platform-esp32` is the second **non-portable platform package** — excluded from `CheckDependencyBoundaries.py` for the same reason as `platform-host` (it includes lwIP/ESP-IDF headers), and is the template the E32 LoRa adapter (5.3) will extend. (2) The UDP `FNetAddress` encoding (6 bytes = 4 IPv4 octets + 2 big-endian port bytes) is **duplicated verbatim** from `platform-host` rather than shared: each platform adapter is self-contained, the encoding is a node-local representation that never crosses the wire, and the two packages are never linked into one binary, so there is no interop requirement to match and no shared dependency to introduce. Alternative considered: promote `MakeUdpAddress`/`IsUdpAddress`/`UdpAddressPort` into portable `microworld-net` and have both adapters depend on it. **Rejected** because it would retro-touch a committed, dependency-checked portable package to serve a non-portable concern — the duplication is bounded (three `constexpr` helpers, one file each) and the cost of a future merge (if a third UDP adapter appears) is far lower than the cost of re-opening Net now. (3) The platform env adds `-Wno-error=pedantic` scoped to itself in `src/CMakeLists.txt`: it is the first ESP32 consumer to `#include` ESP-IDF headers from C++, and ESP-IDF's `esp_libc`/lwIP shims use the GCC `#include_next` extension that `-Wpedantic` flags; the full strict set (`-Wall -Wextra -Wpedantic -Werror`) is retained, with only the system-header extension downgraded to a non-fatal warning for this one env (analogous to the existing `-Wno-deprecated-declarations` suppression for libstdc++ `std::aligned_storage`). | Owner |
 
+| 2026-07-21 | **Phase 5.3 E32 LoRa framing split, CRC choice, broadcast addressing, and length-prefixed resync caveat.** (1) The framing state machine is a **PORTABLE** class in `microworld-net` (`Net/FrameCodec.h`, header-only): the bounded `TFrameDecoder<MaxPayloadBytes>` and the transactional `EncodeFrame`/`ComputeCrc16Ccitt` are transport-agnostic and host-tested off-target (9 cases including the canonical check value, corruption, truncation, and resync), while only the UART syscalls (`uart_param_config`/`uart_set_pin`/`uart_driver_install`/`uart_write_bytes`/`uart_read_bytes`) live in the esp32 package's `src/E32UartGlue.h`, the SOLE home of `<driver/uart.h>`. The split keeps `CheckDependencyBoundaries.py` governing the framer (it adds no dependency beyond Core/Memory/std; 52 files pass) while the non-portable glue stays outside its scope by the same 5.1/5.2 precedent. (2) The CRC is **CRC-16/CCITT-FALSE** (poly `0x1021`, init `0xFFFF`, no input/output reflection, xorout `0x0000`) over `[SrcNodeId, LenHi, LenLo, payload…]` (magic and CRC excluded); chosen for its single canonical check value (`0x29B1` for ASCII "123456789", asserted in tests) and its fit for a detect-accidental-corruption role (the protocol layer will add authentication separately — CRC is not authentication). (3) The LoRa addressing model is **broadcast**: the frame carries only the SENDER's node id, the driver is constructed with its own local node id that it stamps on outgoing frames, `To` must be a valid LoRa address (`Size==1`) or `TrySend` returns `Invalid`, but the wire is broadcast — per-destination routing/ACK filtering is a higher-layer concern deliberately not implemented here. `TryReceive` sets `OutFrom = MakeLoraAddress(frame SrcNodeId)`. (4) The length-prefixed resync **guarantee** is that after any corruption (bad magic, oversize length, CRC mismatch) the decoder resyncs and correctly decodes a subsequent well-formed frame; the honest **non-guarantee**, stated in the `TFrameDecoder` contract, is that a length-prefixed framer cannot rewind, so the frame immediately after a *truncated* frame may be consumed as the truncated frame's payload and lost, recovering within one frame (tested by feeding a truncated candidate followed by valid frames and asserting only that a later frame decodes). `FUartPort = uart_port_t` (not `int`) so call sites need no `-fpermissive` enum conversion. The exact would-block/partial-write/drain behavior of the UART syscalls is documented as runtime-UNVERIFIED in the compile-only phase, mirroring the 5.2 `MSG_TRUNC` caveat. | Owner |
+
 Add a row here whenever a task forces a design choice not covered by this plan.
 
 ---
@@ -1386,7 +1456,7 @@ of its tasks starts, ✅ only when all its tasks are `[x]`.
 | 2 | Runtime Spawn & Destroy | 2.1–2.4 | ✅ |
 | 3 | Composition root & logging | 3.1–3.4 | ✅ |
 | 4 | Networking with roles | 4.1–4.4 | ✅ |
-| 5 | Platform adapters | 5.1–5.3 | 🟨 |
+| 5 | Platform adapters | 5.1–5.3 | ✅ |
 | 6 | Examples, measurement, release | 6.1–6.4 | ⬜ |
 
 **Definition of "production ready" (exit criteria):** Phase 6 task 6.4 checked;
