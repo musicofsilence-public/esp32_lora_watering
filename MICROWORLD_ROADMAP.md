@@ -739,13 +739,13 @@ std::size_t PendingDestroyCount() const noexcept;
 
 ---
 
-### Phase 3 — Engine composition root & logging ⬜
+### Phase 3 — Engine composition root & logging 🟨
 
 Goal: one type that wires the whole runtime, and a logging facade. After this
 phase a "hello world" app is ~20 lines, and every app shares the same frame
 order.
 
-- [ ] **3.1 `MW_LOG` logging facade.** New header
+- [x] **3.1 `MW_LOG` logging facade.** New header
   `lib/microworld/include/MicroWorld/Log.h` (Core owns it; every package may
   use it). Requirements:
   - Levels: `Error`, `Warning`, `Log`, `Verbose`.
@@ -765,6 +765,35 @@ order.
 
   **Verify:** Core package build + new tests pass.
   **Done when:** requirements above met; README of Core documents the macro.
+
+  **Done 2026-07-21.** New Core-owned header
+  [Log.h](lib/microworld/include/MicroWorld/Log.h) (+ [src/Log.cpp](lib/microworld/src/Log.cpp))
+  adds `ELogLevel` (Error/Warning/Log/Verbose), one process-global
+  `FLogSink` function pointer set via `SetLogSink` (default null → disabled), and
+  two macros: `MW_LOG(Level, Category, Fmt, ...)` (printf-style) and
+  `MW_LOG_MSG(Level, Category, Message)` (message-only, `%`-safe).
+
+  **Design decision (plan delegated "choose the simplest option and document
+  it").** Level gating is done in the **preprocessor**, not with `if constexpr`:
+  a below-floor call selects a `((void)0)` emitter that drops all arguments, so
+  it emits zero code, keeps **zero format/category strings in flash**, and never
+  evaluates its arguments — guaranteed at any optimization level, which
+  `if constexpr` cannot promise. Formatting uses a fixed
+  `MW_LOG_MESSAGE_CAPACITY` (default 128) **caller-stack** buffer + `vsnprintf`
+  (no heap, no exceptions, no clock); the plan's sink stays message-only so Core
+  never allocates. `MW_LOG_MIN_LEVEL` defaults to `Log`.
+
+  New [LogTests.cpp](lib/microworld/tests/LogTests.cpp) (6 cases, wired into
+  `microworld_tests`) covers message + formatted sink routing, null-sink safety
+  (drop then reinstall), floor stripping proving a below-floor call does **not**
+  evaluate its arguments (both macros), and the full level boundary
+  (Error/Warning/Log route, Verbose stripped). Core README documents the macro.
+
+  Evidence: `build/host-core` (Ninja g++ 16.1.0, `-Wall -Wextra -Wpedantic
+  -Werror`) builds clean; CTest 5/5; runner 20 cases, 0 failures (6 new); the
+  stripped `Verbose` literal `"verbose"` is **absent** from `LogTests.cpp.obj`
+  while live literals are present (empirical zero-strings proof at `-O0`);
+  `CheckClassDocumentation.py --root lib/microworld` passes (30 files).
 
 - [ ] **3.2 `TEngineHost` composition template.** New header
   `lib/microworld-engine/include/MicroWorld/Engine/EngineHost.h`:
@@ -1060,7 +1089,7 @@ of its tasks starts, ✅ only when all its tasks are `[x]`.
 | 0 | Baseline & governance | 0.1–0.2 | ✅ |
 | 1 | Consolidation: one Actor model | 1.1–1.4 | ✅ |
 | 2 | Runtime Spawn & Destroy | 2.1–2.4 | ✅ |
-| 3 | Composition root & logging | 3.1–3.3 | ⬜ |
+| 3 | Composition root & logging | 3.1–3.3 | 🟨 |
 | 4 | Networking with roles | 4.1–4.4 | ⬜ |
 | 5 | Platform adapters | 5.1–5.3 | ⬜ |
 | 6 | Examples, measurement, release | 6.1–6.4 | ⬜ |

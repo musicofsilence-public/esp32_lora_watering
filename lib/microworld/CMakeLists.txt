@@ -9,6 +9,7 @@ option(MICROWORLD_BUILD_TESTS "Build MicroWorld host tests" ON)
 # layer (see MICROWORLD_ROADMAP.md Phase 1).
 set(MICROWORLD_CORE_SOURCES
     src/Application.cpp
+    src/Log.cpp
     src/TickFunction.cpp
 )
 
@@ -49,6 +50,7 @@ if(MICROWORLD_BUILD_TESTS)
 
     add_executable(microworld_tests
         tests/TestMain.cpp
+        tests/LogTests.cpp
         tests/TickFunctionTests.cpp
     )
     target_link_libraries(microworld_tests PRIVATE MicroWorld::Core)

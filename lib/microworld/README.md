@@ -16,6 +16,7 @@ Current development status is in [PROGRESS.md](PROGRESS.md).
 - `FLifecycleGuard` and the `FTickable` contract express a forward-only
   begin/tick/end lifecycle without scattered boolean flags.
 - Lifecycle, capacity, and time failures return `ERuntimeResult`.
+- `MW_LOG` / `MW_LOG_MSG` give a bounded logging facade every package can use.
 
 Core is lifecycle and tick **primitives** only. The managed World / Actor /
 Component model lives in the Engine package (`UWorld` / `AActor` /
@@ -26,10 +27,39 @@ consolidation. Consumers still own their concrete objects.
 
 - `MicroWorld/Application.h`
 - `MicroWorld/Lifecycle.h`
+- `MicroWorld/Log.h`
 - `MicroWorld/TickFunction.h`
 - `MicroWorld/Tickable.h`
 - `MicroWorld/Time.h`
 - `MicroWorld/Version.h`
+
+## Logging
+
+`MicroWorld/Log.h` is a bounded logging facade owned by Core and usable from
+every package. It has four levels — `Error`, `Warning`, `Log`, `Verbose` — and a
+single process-global sink:
+
+```cpp
+using FLogSink = void (*)(ELogLevel Level, const char* Category, const char* Message);
+```
+
+Install one sink at startup with `SetLogSink`; the default sink is null, which
+disables logging. There are two call macros:
+
+```cpp
+MW_LOG(Warning, "Net", "peer %u timed out", Index); // printf-style
+MW_LOG_MSG(Log, "Boot", "runtime ready");           // already-formed message
+```
+
+Use `MW_LOG_MSG` for a runtime string that may itself contain `%`. Formatting
+happens in a fixed caller-stack buffer (`MW_LOG_MESSAGE_CAPACITY`, default 128
+bytes) via `vsnprintf` — no heap, no exceptions, no clock.
+
+A **compile-time floor** `MW_LOG_MIN_LEVEL` (default `Log`) strips less important
+call sites entirely: they expand to nothing, emit no code, keep no format or
+category strings in flash, and never evaluate their arguments. Lower the floor
+for a build with `-DMW_LOG_MIN_LEVEL=MW_LOG_LEVEL_Verbose`. The facade is
+single-threaded; install the sink before the first log call.
 
 ## Build
 
