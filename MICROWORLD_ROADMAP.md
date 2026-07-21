@@ -739,7 +739,7 @@ std::size_t PendingDestroyCount() const noexcept;
 
 ---
 
-### Phase 3 — Engine composition root & logging 🟨
+### Phase 3 — Engine composition root & logging ✅
 
 Goal: one type that wires the whole runtime, and a logging facade. After this
 phase a "hello world" app is ~20 lines, and every app shares the same frame
@@ -857,7 +857,7 @@ order.
   `build/host-eng` still builds and CTest passes 1/1 (no regression);
   `CheckClassDocumentation.py --root lib/microworld-engine` passes.
 
-- [ ] **3.3 Tests + example for the host.**
+- [x] **3.3 Tests + example for the host.**
   `lib/microworld-engine/tests/EngineHostTests.cpp`: begin/tick/end lifecycle;
   frame order observable via instrumented timer callback vs. actor tick vs. GC
   reclamation (spawn garbage, verify bounded reclamation across ticks);
@@ -868,6 +868,24 @@ order.
   **Verify:** engine package build + tests; example runs and prints expected
   lifecycle trace.
   **Done when:** example ≤ ~60 lines of user code; tests pass.
+
+  **Completed 2026-07-21.** Added five `TEngineHost` behavior cases in
+  `lib/microworld-engine/tests/EngineHostTests.cpp` (lifecycle order; timer-
+  before-tick frame order; bounded GC reclamation of unrooted objects across
+  ticks; transactional non-monotonic-time rejection; idempotent `EndPlay`),
+  wired into `MICROWORLD_ENGINE_TEST_SOURCES` between the inline-types and GC
+  suites. Rewrote `examples/HostLifecycle/Main.cpp` on `TEngineHost` (the
+  `FDeviceWorld`/`TInlineWorld` typedef and hand-rolled store/registry/world
+  composition are gone; `FSensorComponent`/`FDeviceActor` and the canonical
+  trace are unchanged). Applied the mandatory 3.2 gap fix — a public
+  `TEngineHost::FindClass(FTypeId)` accessor — so user descriptors can be built
+  against the registry's own parent copies and user types constructed through
+  them (roadmap section 6, 2026-07-21, option a). GCC 16.1.0 via Ninja:
+  `host-eng` builds clean under `-Wall -Wextra -Wpedantic -Werror
+  -fno-exceptions -fno-rtti`; CTest 1/1; runner 74 host cases, 0 failures
+  (5 new); `microworld_engine_host_lifecycle` prints the unchanged lifecycle
+  trace and exits 0; `CheckClassDocumentation.py --root lib/microworld-engine`
+  passes (24 files).
 
 ---
 
@@ -1103,6 +1121,7 @@ platform-free (dependency checker must keep passing).
 | 2026-07-20 | **PROPOSED (awaiting owner):** `lib/microworld/docs/diagrams` has no `AGENTS.md`, so the prescribed `CheckFolderAgents.py` strict run fails. Pre-existing (predates Phase 1), unrelated to the retirement. Options: (a) add a short `docs/diagrams/AGENTS.md`, (b) add `--exclude diagrams` to the prescribed invocation, or (c) accept it as a generated-assets directory needing no guide (per `tools/AGENTS.md`, the folder check is "not a policy requiring every future package subdirectory to add a local guide"). | PROPOSED |
 | 2026-07-21 | Phase 2.2 marking of a destroyed actor's components: the store blocks `MarkPendingDestroy` under the dispatch guard `DispatchEndPlay` runs within, and that method is shared with non-destroying world `EndPlay`. Chose **option A** (simplest that works): keep `DispatchEndPlay` pure; `ApplyPending` ends doomed actors under the guard, then marks their components + the actor for destroy after releasing it (new `UWorld`-friend `AActor` helper). Option B (unguarded destroy cascade + a "being destroyed" flag) rejected — it loses reentrancy protection. | Owner |
 | 2026-07-21 | **RESOLVED — who reclaims a destroyed actor's slot.** Surfaced writing 2.3: section 4's old frame order and section 2's design assumed the incremental collector reclaims released actors, but `FGarbageCollector`'s sweep explicitly *skips* pending-destroy slots — those are reclaimed only by the store's `ApplyPendingDestroy` barrier, so the frame order was missing a step (GC alone never frees a destroyed actor). Owner chose **option (a)** (simplest + most reliable): add an explicit, bounded `Store.ApplyPendingDestroy(Budget)` reclamation slice to the `TEngineHost` frame order (now section 4 step 5), keeping `UWorld::ApplyPending` single-purpose and the already-tested Phase 2 code untouched. Rejected: (b) run reclamation inside `UWorld::ApplyPending` — couples the structural barrier to store reclamation and buries the budget; (c) reword only — leaves GC unable to reclaim destroyed actors. Implemented as a spec in section 4; wired for real in Phase 3.2. | Owner |
+| 2026-07-21 | **RESOLVED — `TEngineHost` needs a descriptor lookup.** Surfaced writing 3.3: the 3.2 spec exposed `RegisterClass` but no lookup, and the object store's construction validation requires the descriptor passed to `NewObject` to be the registry's OWN copy (identity check) with `Parent` pointing at the registry's own parent copy (`HasValidParentChain`). Without a lookup, user actors/components cannot be created through the host — which 3.3 requires. Chose **option (a)** (minimal): add one public `const FClassDescriptor* TEngineHost::FindClass(FTypeId) const noexcept` that forwards to `TClassRegistry::Find`, matching how `TEngineEnvironment::FindDescriptor` already exposes the same access for the test fixture. Rejected: (b) variadic auto-register-and-construct helper (`Host.NewObject<FDeviceActor>(id, name, parent_id, ...)` that registers + looks up + constructs in one call) — convenient but hides the descriptor-identity invariant behind a magic helper and over-reaches the 3.2 scope. Applied in the same 3.3 commit; noted in the 3.3 completion note. | Owner |
 
 Add a row here whenever a task forces a design choice not covered by this plan.
 
@@ -1118,7 +1137,7 @@ of its tasks starts, ✅ only when all its tasks are `[x]`.
 | 0 | Baseline & governance | 0.1–0.2 | ✅ |
 | 1 | Consolidation: one Actor model | 1.1–1.4 | ✅ |
 | 2 | Runtime Spawn & Destroy | 2.1–2.4 | ✅ |
-| 3 | Composition root & logging | 3.1–3.3 | 🟨 |
+| 3 | Composition root & logging | 3.1–3.3 | ✅ |
 | 4 | Networking with roles | 4.1–4.4 | ⬜ |
 | 5 | Platform adapters | 5.1–5.3 | ⬜ |
 | 6 | Examples, measurement, release | 6.1–6.4 | ⬜ |

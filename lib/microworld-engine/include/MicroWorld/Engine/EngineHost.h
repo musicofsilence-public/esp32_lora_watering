@@ -52,8 +52,7 @@ public:
 	 * every slot, reclaiming all pending destroys each frame).
 	 */
 	explicit TEngineHost(
-		const FGarbageCollectionBudget CollectionBudget,
-		const std::uint32_t ReclamationBudget = static_cast<std::uint32_t>(MaxObjects)) noexcept
+		const FGarbageCollectionBudget CollectionBudget, const std::uint32_t ReclamationBudget = static_cast<std::uint32_t>(MaxObjects)) noexcept
 		: GcBudget(CollectionBudget)
 		, FrameReclamationBudget(ReclamationBudget)
 		, Store(MakeStoreStorage(), MakeClassRegistryView(Registry))
@@ -70,6 +69,14 @@ public:
 
 	/** Registers one user class descriptor so the store accepts its construction. */
 	EObjectResult RegisterClass(const FClassDescriptor& Descriptor) noexcept { return Registry.Register(Descriptor); }
+
+	/**
+	 * Returns one registered descriptor by type id, or null. Callers need this handle
+	 * to build child descriptors (whose parent must point at the registry's own copy)
+	 * and to construct user types, because the store validates descriptor identity
+	 * against the registry's copy rather than the descriptor the caller registered.
+	 */
+	const FClassDescriptor* FindClass(const FTypeId TypeId) const noexcept { return Registry.Find(TypeId); }
 
 	/**
 	 * Constructs the single UWorld in the store and roots it, returning the world

@@ -44,5 +44,15 @@ ctest --test-dir <build-directory> --output-on-failure
 CMake consumers link `MicroWorld::Engine`. A successful compile or host test
 does not establish target runtime margins or hardware behavior.
 
+## Example
+
+[`examples/HostLifecycle/Main.cpp`](examples/HostLifecycle/Main.cpp) is the
+canonical "hello MicroWorld": it builds a managed composition through
+`TEngineHost`, registers one actor and one ticking component, and drives
+`BeginPlay` / `Tick` / `EndPlay` so the deterministic lifecycle order is visible
+on stdout. Build it with the CMake target `microworld_engine_host_lifecycle`
+(included by the default `host-eng` configuration above). It is the smallest
+demonstration of the composition root added in roadmap Phase 3.
+
 Engine does not provide networking, runtime spawn/destroy, subsystems,
 serialization, replication, platform abstraction, or hardware APIs.
