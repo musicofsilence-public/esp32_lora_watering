@@ -21,6 +21,18 @@ if(NOT TARGET MicroWorld::Net)
     )
 endif()
 
+# The Phase 6.1 two-node demo composes the engine's TEngineHost (which owns
+# UWorld/AActor/GC) on top of a PlatformHost UDP driver, so the example links
+# MicroWorld::Engine directly. Engine never depends on Net (the frame seam is
+# caller-bound via TNetHostFrame), so adding it here introduces no cycle.
+if(NOT TARGET MicroWorld::Engine)
+    set(MICROWORLD_ENGINE_BUILD_BENCHMARKS OFF)
+    add_subdirectory(
+        "${CMAKE_CURRENT_SOURCE_DIR}/../microworld-engine"
+        "${CMAKE_CURRENT_BINARY_DIR}/microworld-engine"
+    )
+endif()
+
 set(MICROWORLD_PLATFORM_HOST_PRODUCTION_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/src/HostUdpDriver.cpp"
 )
@@ -107,4 +119,23 @@ if(MICROWORLD_PLATFORM_HOST_BUILD_TESTS)
         )
         add_test(NAME microworld_platform_host_tests COMMAND microworld_platform_host_tests)
     endif()
+endif()
+
+# The Phase 6.1 two-node acceptance demo: one process hosts a dedicated-server
+# TEngineHost and a bare TNetHost client over real localhost UDP. A host-UDP
+# consumer MUST live in this non-portable package because only platform-host may
+# reach OS socket headers.
+set(MICROWORLD_PLATFORM_HOST_EXAMPLE_SOURCE
+    "${CMAKE_CURRENT_SOURCE_DIR}/examples/TwoNodeDemo/Main.cpp"
+)
+if(EXISTS "${MICROWORLD_PLATFORM_HOST_EXAMPLE_SOURCE}")
+    add_executable(microworld_platform_host_two_node_demo ${MICROWORLD_PLATFORM_HOST_EXAMPLE_SOURCE})
+    target_link_libraries(microworld_platform_host_two_node_demo PRIVATE
+        MicroWorld::PlatformHost
+        MicroWorld::Engine
+    )
+    microworld_platform_host_enable_strict_portable_options(microworld_platform_host_two_node_demo)
+    microworld_platform_host_disable_exceptions_and_rtti(
+        "${MICROWORLD_PLATFORM_HOST_EXAMPLE_SOURCE}"
+    )
 endif()

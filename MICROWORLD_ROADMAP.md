@@ -1392,12 +1392,24 @@ platform-free (dependency checker must keep passing).
 
 ---
 
-### Phase 6 — Examples, measurement & release hardening ⬜
+### Phase 6 — Examples, measurement & release hardening 🟨
 
-- [ ] **6.1 Two-node demo.** `examples/` app: dedicated server on host (UDP),
+- [x] **6.1 Two-node demo.** `examples/` app: dedicated server on host (UDP),
   ESP32 or second host process as client; client button/keyboard event spawns
   an actor server-side, server broadcasts state at a heartbeat cadence.
   This is the acceptance demo for "UE5 dev can build a small networked thing".
+  **Completed (2026-07-21):** single host executable
+  `lib/microworld-platform-host/examples/TwoNodeDemo/Main.cpp` composes a
+  dedicated-server `TEngineHost` and a bare `TNetHost` client over real
+  localhost `FHostUdpDriver`s in one deterministic interleaved loop. Client
+  channel-1 input events spawn actors in the server world; the server
+  broadcasts a 2-byte state payload `{tick, actor-count}` on channel 2 each
+  step. Evidence: clean strict-gate build (`-Wall -Wextra -Wpedantic -Werror
+  -fno-exceptions -fno-rtti`, no warnings); existing
+  `microworld_platform_host_tests` still `[SUMMARY] 7 tests, 0 failures`; the
+  demo trace is byte-identical across three runs and exits 0;
+  `CheckClassDocumentation.py` (10 files) and `CheckDependencyBoundaries.py`
+  (5 packages, 52 files) pass; `clang-format --dry-run --Werror` clean.
 
 - [ ] **6.2 Measure runtime margins.** Every PROGRESS.md row says "target
   runtime margins unmeasured". Measure on ESP32-S3 (requires explicit human
@@ -1440,6 +1452,8 @@ platform-free (dependency checker must keep passing).
 
 | 2026-07-21 | **Phase 5.3 E32 LoRa framing split, CRC choice, broadcast addressing, and length-prefixed resync caveat.** (1) The framing state machine is a **PORTABLE** class in `microworld-net` (`Net/FrameCodec.h`, header-only): the bounded `TFrameDecoder<MaxPayloadBytes>` and the transactional `EncodeFrame`/`ComputeCrc16Ccitt` are transport-agnostic and host-tested off-target (9 cases including the canonical check value, corruption, truncation, and resync), while only the UART syscalls (`uart_param_config`/`uart_set_pin`/`uart_driver_install`/`uart_write_bytes`/`uart_read_bytes`) live in the esp32 package's `src/E32UartGlue.h`, the SOLE home of `<driver/uart.h>`. The split keeps `CheckDependencyBoundaries.py` governing the framer (it adds no dependency beyond Core/Memory/std; 52 files pass) while the non-portable glue stays outside its scope by the same 5.1/5.2 precedent. (2) The CRC is **CRC-16/CCITT-FALSE** (poly `0x1021`, init `0xFFFF`, no input/output reflection, xorout `0x0000`) over `[SrcNodeId, LenHi, LenLo, payload…]` (magic and CRC excluded); chosen for its single canonical check value (`0x29B1` for ASCII "123456789", asserted in tests) and its fit for a detect-accidental-corruption role (the protocol layer will add authentication separately — CRC is not authentication). (3) The LoRa addressing model is **broadcast**: the frame carries only the SENDER's node id, the driver is constructed with its own local node id that it stamps on outgoing frames, `To` must be a valid LoRa address (`Size==1`) or `TrySend` returns `Invalid`, but the wire is broadcast — per-destination routing/ACK filtering is a higher-layer concern deliberately not implemented here. `TryReceive` sets `OutFrom = MakeLoraAddress(frame SrcNodeId)`. (4) The length-prefixed resync **guarantee** is that after any corruption (bad magic, oversize length, CRC mismatch) the decoder resyncs and correctly decodes a subsequent well-formed frame; the honest **non-guarantee**, stated in the `TFrameDecoder` contract, is that a length-prefixed framer cannot rewind, so the frame immediately after a *truncated* frame may be consumed as the truncated frame's payload and lost, recovering within one frame (tested by feeding a truncated candidate followed by valid frames and asserting only that a later frame decodes). `FUartPort = uart_port_t` (not `int`) so call sites need no `-fpermissive` enum conversion. The exact would-block/partial-write/drain behavior of the UART syscalls is documented as runtime-UNVERIFIED in the compile-only phase, mirroring the 5.2 `MSG_TRUNC` caveat. (5) **Follow-up fix (review):** `uart_driver_install` requires the RX ring buffer to be strictly greater than `UART_HW_FIFO_LEN` and the TX ring buffer to be zero or strictly greater (`esp_driver_uart/src/uart.c`; `SOC_UART_FIFO_LEN == 128` on ESP32-S3); the initial sizing of `2*(58+6) == 128` sat exactly on the forbidden boundary and would have returned `ESP_FAIL` at runtime, leaving the driver permanently inert. The ring buffers are now sized to `2*UART_HW_FIFO_LEN(Port)`, which clears the floor on any UART, and the duplicated frame-size constants in the glue were removed. Caught by review; masked by the compile-only proof. | Owner |
 
+| 2026-07-21 | **Phase 6.1 single-process two-node demo; GC-budget vs host-sizing invariant.** (1) The acceptance demo runs as **one host executable hosting two nodes** — a dedicated-server `TEngineHost` and a bare `TNetHost` client — driven in **one deterministic interleaved loop** in one process, not as two OS processes. Two processes cannot be a single deterministic acceptance run (no shared logical clock, ports/timing vary per launch); co-hosting mirrors the proven Phase 5.1 `HostNetEndToEndTests` and makes the determinism proof a single runnable command. The client is deliberately a bare `TNetHost` driven by explicit `PumpSend`/`PumpReceive` while the server is a full `TEngineHost` advanced only through `Tick(Now)`, so the demo showcases both the low-level net API and the engine-integrated path side by side. (2) Surfaced at integration: the server's `TEngineHost` profile must satisfy `MaxRoots <= FGarbageCollectionBudget.MaxRootOperations` AND `MaxObjects <= MaxSweepOperations` so one bounded GC slice completes a full mark/sweep cycle every tick. If either bound is violated (e.g. `MaxObjects=16` with the established `{1,4,8}` budget), the incremental GC leaves the store mid-cycle (`ActiveCollector` set) across ticks, and a spawn arriving during that window fails `CreateObject` with `LifecycleLocked` because `IsMutationLocked()` includes `ActiveCollector != nullptr`. The demo therefore mirrors the proven `EngineNetHostTests` profile ratios (`MaxRoots=1`, `MaxObjects=8` against budget `{1,4,8}`) rather than the originally suggested `<8,16,…>` — fixed/bounded as the task allows, and the constraint is documented in the demo header so a future sizing change cannot reintroduce the failure. (3) "world actor count" is a dedicated logical counter incremented in the spawn handler: `UWorld` exposes only pending-spawn/pending-destroy counts and `GetObjectStore().Stats().OccupiedSlots` includes the world object itself, so neither is the honest "live actors in this world" value the broadcast should carry. | Owner |
+
 Add a row here whenever a task forces a design choice not covered by this plan.
 
 ---
@@ -1457,7 +1471,7 @@ of its tasks starts, ✅ only when all its tasks are `[x]`.
 | 3 | Composition root & logging | 3.1–3.4 | ✅ |
 | 4 | Networking with roles | 4.1–4.4 | ✅ |
 | 5 | Platform adapters | 5.1–5.3 | ✅ |
-| 6 | Examples, measurement, release | 6.1–6.4 | ⬜ |
+| 6 | Examples, measurement, release | 6.1–6.4 | 🟨 |
 
 **Definition of "production ready" (exit criteria):** Phase 6 task 6.4 checked;
 version 0.2.0 tagged; a UE5 developer can, following only the READMEs, build a
