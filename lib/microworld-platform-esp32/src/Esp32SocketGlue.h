@@ -209,11 +209,12 @@ constexpr std::size_t PeekScratchBytes = 1200;
  * Peeks the head datagram into an internal scratch buffer, never the caller's.
  *
  * When lwIP defines `MSG_TRUNC` the peek returns the true datagram length in
- * `BytesReady`. When `MSG_TRUNC` is unavailable the peek returns the delivered
- * length only, so an oversize datagram is reported `Ready` with a sentinel
- * `BytesReady = PeekScratchBytes + 1` only when `recvfrom` itself fails; the
- * exact oversize behavior is otherwise UNVERIFIED at runtime (compile-only phase).
- * The peek never touches the caller-owned destination, keeping `Full` transactional.
+ * `BytesReady`; otherwise it returns the delivered length, so a datagram larger
+ * than the scratch is under-reported (capped at `PeekScratchBytes`). For every
+ * in-contract capacity (at most the scratch size) this still drives `Full`
+ * correctly; the exact oversize-datagram behavior is UNVERIFIED at runtime
+ * (compile-only phase). The peek never touches the caller-owned destination,
+ * keeping `Full` transactional.
  *
  * @param Socket Open non-blocking socket.
  * @return Peek classification with the observed datagram length when `Ready`.
