@@ -620,7 +620,7 @@ std::size_t PendingDestroyCount() const noexcept;
   Evidence: `host-eng` builds clean under strict warnings and CTest passes 1/1
   (no regression). Spawn/destroy behavior is exercised by task 2.3's tests.
 
-- [ ] **2.3 Tests for spawn/destroy.** New
+- [x] **2.3 Tests for spawn/destroy.** New
   `lib/microworld-engine/tests/EngineSpawnDestroyTests.cpp` covering at
   minimum: spawn during play begins at next barrier (not immediately); destroy
   during play ends at barrier with reverse-order component shutdown; capacity
@@ -636,6 +636,47 @@ std::size_t PendingDestroyCount() const noexcept;
   cmake -S lib/microworld-engine -B build/host-eng && cmake --build build/host-eng && ctest --test-dir build/host-eng --output-on-failure
   ```
   **Done when:** all listed behaviors have passing cases.
+
+  **Done 2026-07-21.** New
+  [EngineSpawnDestroyTests.cpp](lib/microworld-engine/tests/EngineSpawnDestroyTests.cpp)
+  (12 cases) wired into `MICROWORLD_ENGINE_TEST_SOURCES`. It mirrors the existing
+  engine-test idiom (`TEngineEnvironment`, `FSequenceCounter`/event states, a
+  `FCollectorFixture`, and a `FSecondStore` for cross-store references). Cases:
+  spawn begins only at the barrier (not at the call) and then ticks as a live
+  participant; destroy ends at the barrier with actor-before-components and
+  components in reverse order; spawn capacity counts live+pending before *and*
+  after the barrier; duplicate spawn rejected while pending and while live;
+  destroy of a never-registered actor rejected; spawn/destroy lifecycle-locked
+  before BeginPlay and after EndPlay; every spawn reference rejection
+  (empty→InvalidReference, foreign→CrossStore, other-world→AlreadyOwned) and
+  destroy reference rejection (empty→InvalidReference, foreign→CrossStore,
+  repeat→Duplicate) with pending-queue sentinels; survivor tick order preserved
+  after a mid-list removal; a destroyed actor's handle hidden at the barrier and
+  durably stale (slot reused with a fresh generation) after reclamation; and a
+  full GC cycle after destroy that accounts every root and keeps the worklist
+  within capacity, followed by the store barrier reclaiming the actor + both
+  components.
+
+  **Open question resolved (no design change).** "Spawn+destroy of the same actor
+  in one frame": `DestroyActor` on a still-pending-spawn actor returns
+  `InvalidReference` — the documented section-5 behavior (a pending-spawn actor is
+  not yet registered; destroy does not cancel a spawn). Tested as-is; no new
+  decision needed.
+
+  ⚠️ **Plan/implementation discrepancy flagged (see section 6, PROPOSED
+  2026-07-21).** The section-4 frame order and the section-2 design say the GC
+  slice reclaims the "released" (pending-destroy) actors, but the object store's
+  GC sweep explicitly *skips* pending-destroy slots
+  ([GarbageCollector.cpp](lib/microworld-object/src/GarbageCollector.cpp) sweep
+  phase) — reclamation of destroyed actors is the store's `ApplyPendingDestroy`
+  barrier, not GC mark/sweep. The tests document the real mechanism (GC accounts
+  roots+worklist and leaves pending-destroy to the store; `ApplyPendingDestroy`
+  reclaims). This affects Phase 3's `TEngineHost` frame order; owner input
+  requested before 3.2.
+
+  Evidence: `build/host-eng` builds clean under strict warnings
+  (`-Wall -Wextra -Wpedantic -Werror -fno-exceptions -fno-rtti`); CTest 1/1;
+  runner reports 67 tests, 0 failures (12 new).
 
 - [ ] **2.4 Ergonomics: `TInlineActor<N>` / `TInlineWorld<N>`.** New header
   `lib/microworld-engine/include/MicroWorld/Engine/InlineTypes.h`. Use the
@@ -971,6 +1012,7 @@ platform-free (dependency checker must keep passing).
 | 2026-07-20 | **Merge tasks 1.2 + 1.3 into one combined step** (delete the retired headers/sources *and* migrate/delete every retired-type dependent together), because 1.2's Done-when (green `build/host-core`) cannot hold while 1.3's dependents still `#include` the deleted headers. The Core build goes green once, at the end of the combined step. | Owner |
 | 2026-07-20 | **PROPOSED (awaiting owner):** `lib/microworld/docs/diagrams` has no `AGENTS.md`, so the prescribed `CheckFolderAgents.py` strict run fails. Pre-existing (predates Phase 1), unrelated to the retirement. Options: (a) add a short `docs/diagrams/AGENTS.md`, (b) add `--exclude diagrams` to the prescribed invocation, or (c) accept it as a generated-assets directory needing no guide (per `tools/AGENTS.md`, the folder check is "not a policy requiring every future package subdirectory to add a local guide"). | PROPOSED |
 | 2026-07-21 | Phase 2.2 marking of a destroyed actor's components: the store blocks `MarkPendingDestroy` under the dispatch guard `DispatchEndPlay` runs within, and that method is shared with non-destroying world `EndPlay`. Chose **option A** (simplest that works): keep `DispatchEndPlay` pure; `ApplyPending` ends doomed actors under the guard, then marks their components + the actor for destroy after releasing it (new `UWorld`-friend `AActor` helper). Option B (unguarded destroy cascade + a "being destroyed" flag) rejected — it loses reentrancy protection. | Owner |
+| 2026-07-21 | **PROPOSED (awaiting owner):** who reclaims a destroyed actor's slot. Surfaced writing 2.3. Section 4's frame order (step 5 "GC slice") and section 2's design ("`MarkPendingDestroy` is called on the store so GC reclaims it") assume the incremental collector reclaims released actors, but `FGarbageCollector`'s sweep explicitly *skips* pending-destroy slots — those are reclaimed only by the store's `ApplyPendingDestroy` barrier. So the section-4 frame order is missing an `ApplyPendingDestroy` step; GC alone will never free a destroyed actor. Options: (a) add an explicit `World.ApplyPendingDestroy`/`Store.ApplyPendingDestroy` step to the `TEngineHost` frame order in Phase 3 (bounded per frame, like the GC slice); (b) have `UWorld::ApplyPending` itself run a bounded `ApplyPendingDestroy` after marking (couples the barrier to reclamation); (c) revise the section-4 wording only if a different reclamation model is intended. 2.3 tests the real mechanism (a/b-agnostic: store barrier reclaims) and does not decide this. | PROPOSED |
 
 Add a row here whenever a task forces a design choice not covered by this plan.
 
