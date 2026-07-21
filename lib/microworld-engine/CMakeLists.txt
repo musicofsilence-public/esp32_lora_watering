@@ -81,6 +81,17 @@ microworld_engine_disable_exceptions_and_rtti(
 if(MICROWORLD_ENGINE_BUILD_TESTS)
     include(CTest)
 
+    # The net-composition test links Net into the test executable only; production
+    # microworld_engine never depends on Net (the dependency checker enforces this).
+    if(NOT TARGET MicroWorld::Net)
+        set(MICROWORLD_NET_BUILD_TESTS OFF)
+        set(MICROWORLD_NET_BUILD_BENCHMARKS OFF)
+        add_subdirectory(
+            "${CMAKE_CURRENT_SOURCE_DIR}/../microworld-net"
+            "${CMAKE_CURRENT_BINARY_DIR}/microworld-net"
+        )
+    endif()
+
     set(MICROWORLD_ENGINE_TEST_SOURCES
         "${CMAKE_CURRENT_SOURCE_DIR}/../microworld/tests/TestMain.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/tests/EngineAllocationCounters.cpp"
@@ -89,6 +100,7 @@ if(MICROWORLD_ENGINE_BUILD_TESTS)
         "${CMAKE_CURRENT_SOURCE_DIR}/tests/EngineSpawnDestroyTests.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/tests/EngineInlineTypesTests.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/tests/EngineHostTests.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests/EngineNetHostTests.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/tests/EngineGarbageCollectionTests.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/tests/EngineTimerManagerTests.cpp"
     )
@@ -107,7 +119,7 @@ if(MICROWORLD_ENGINE_BUILD_TESTS)
         target_include_directories(microworld_engine_tests PRIVATE
             "${CMAKE_CURRENT_SOURCE_DIR}/../microworld/tests"
         )
-        target_link_libraries(microworld_engine_tests PRIVATE MicroWorld::Engine)
+        target_link_libraries(microworld_engine_tests PRIVATE MicroWorld::Engine MicroWorld::Net)
         microworld_engine_enable_strict_portable_options(microworld_engine_tests)
         microworld_engine_disable_exceptions_and_rtti(
             "${MICROWORLD_ENGINE_TEST_SOURCES}"

@@ -4,6 +4,7 @@
 #include <MicroWorld/Engine/ActorComponent.h>
 #include <MicroWorld/Engine/EngineClassIds.h>
 #include <MicroWorld/Engine/EngineStorage.h>
+#include <MicroWorld/Engine/NetworkFrame.h>
 #include <MicroWorld/Engine/Timer.h>
 #include <MicroWorld/Engine/World.h>
 #include <MicroWorld/Object/ClassDescriptor.h>
@@ -27,7 +28,9 @@ namespace MicroWorld
  * store, garbage collector, world actor registry, and timer manager — behind one
  * canonical per-frame order. Construct it in static storage or a stack frame,
  * register user classes, call CreateWorld once, then drive BeginPlay/Tick/EndPlay.
- * Every instantiation sizes all storage at compile time and never allocates.
+ * Every instantiation sizes all storage at compile time and never allocates; an
+ * optional caller-owned network frame bound at construction makes the per-frame
+ * network slots live.
  */
 template<
 	std::size_t MaxClasses,
@@ -61,6 +64,21 @@ public:
 		, Timers(TimePointMilliseconds{0})
 	{
 		RegisterBaseClasses();
+	}
+
+	/**
+	 * Builds the host exactly as the budget-only constructor does, then binds a
+	 * caller-owned network frame so Tick drives its inbound step first (step 1) and
+	 * its outbound step last (step 7). The frame and the network host behind it must
+	 * outlive this host.
+	 */
+	explicit TEngineHost(
+		const FGarbageCollectionBudget CollectionBudget,
+		INetworkFrame& NetworkFrame,
+		const std::uint32_t ReclamationBudget = static_cast<std::uint32_t>(MaxObjects)) noexcept
+		: TEngineHost(CollectionBudget, ReclamationBudget)
+	{
+		Network = &NetworkFrame;
 	}
 
 	TEngineHost(const TEngineHost&) = delete;
@@ -102,8 +120,7 @@ public:
 		{
 			Parent = Registry.Find(UWorldClassId);
 		}
-		const FClassDescriptor Candidate =
-			MakeClassDescriptor<T>(TypeId, Name, Parent, &TraceManagedObjectReferences);
+		const FClassDescriptor Candidate = MakeClassDescriptor<T>(TypeId, Name, Parent, &TraceManagedObjectReferences);
 		return Registry.Register(Candidate);
 	}
 
@@ -190,14 +207,20 @@ public:
 	}
 
 	/**
-	 * Runs one canonical frame in fixed order — timers, world advance, the pending
-	 * spawn/destroy barrier, the bounded store reclamation slice, then one bounded
-	 * garbage-collection slice — and returns the world's advance/apply result.
+	 * Runs one canonical frame in fixed order and returns the world's advance/apply
+	 * result. The full order is:
+	 *   1. NetworkFrame TickDispatch — drain inbound traffic, dispatch messages, age peers.
+	 *   2. Timers.Advance — fire due timer callbacks.
+	 *   3. World.Advance — tick every component, then every actor.
+	 *   4. World.ApplyPending — begin pending spawns; end and unregister pending destroys.
+	 *   5. Store.ApplyPendingDestroy — bounded reclamation of the slots step 4 marked.
+	 *   6. GC slice — start a cycle when idle, then advance one bounded slice.
+	 *   7. NetworkFrame TickFlush — flush outbound traffic and heartbeats.
 	 *
-	 * Rejects a rolled-back clock transactionally before any step runs. The timer
-	 * and collector steps advance on a bounded best-effort basis after the monotonic
-	 * guard, so the world result is the authoritative per-frame outcome. Network
-	 * receive/send slots become live in Phase 4.
+	 * Rejects a rolled-back clock transactionally before any step runs. Every step
+	 * but the world advance/apply is bounded best-effort, so the world result is the
+	 * authoritative per-frame outcome. The two network slots run only when a frame
+	 * was bound at construction; otherwise they are inert.
 	 */
 	ERuntimeResult Tick(const TimePointMilliseconds NowMilliseconds) noexcept
 	{
@@ -212,7 +235,11 @@ public:
 		}
 		LastTickMilliseconds = NowMilliseconds;
 
-		// 1. NetHost.PumpReceive(now) — Phase 4 network slot (no net host yet).
+		// 1. Drain inbound network traffic and dispatch messages before the frame advances.
+		if (Network != nullptr)
+		{
+			Network->TickDispatch(NowMilliseconds);
+		}
 		// 2. Fire due timer callbacks.
 		(void)Timers.Advance(NowMilliseconds);
 		// 3. Tick every component then every actor.
@@ -228,7 +255,11 @@ public:
 			(void)Collector.RequestCollection();
 		}
 		(void)Collector.Advance(GcBudget);
-		// 7. NetHost.PumpSend(now) — Phase 4 network slot (no net host yet).
+		// 7. Flush queued outbound network traffic and heartbeats after the frame settles.
+		if (Network != nullptr)
+		{
+			Network->TickFlush(NowMilliseconds);
+		}
 
 		return AdvanceResult != ERuntimeResult::Success ? AdvanceResult : PendingResult;
 	}
@@ -278,6 +309,9 @@ private:
 
 	/** Bounds the per-tick store slots inspected by the destruction barrier. */
 	std::uint32_t FrameReclamationBudget;
+
+	/** Optional caller-owned network frame advanced first and last each tick; null when standalone. */
+	INetworkFrame* Network{nullptr};
 
 	/** Records the last accepted tick time so a rolled-back clock is rejected. */
 	TimePointMilliseconds LastTickMilliseconds{0};

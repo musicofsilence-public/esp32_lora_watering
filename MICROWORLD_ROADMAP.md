@@ -922,7 +922,7 @@ order.
 
 ---
 
-### Phase 4 — Simple networking with roles ⬜
+### Phase 4 — Simple networking with roles ✅
 
 Goal: the UE5 *concept* of dedicated server / listen server / client, delivered
 as simple bounded message passing. **No replication, no RPC, no property sync.**
@@ -1134,9 +1134,9 @@ via `ENetHostState GetState() const noexcept`.
   changed: `lib/microworld-net/include/MicroWorld/Net/NetHost.h` (new),
   `lib/microworld-net/tests/NetHostTests.cpp` (new),
   `lib/microworld-net/CMakeLists.txt`, `MICROWORLD_ROADMAP.md`. No `PROGRESS.md`
-  row (phase not yet ✅). Task 4.4 not started.
+  row at 4.3 (deferred to phase close; added when 4.4 completed Phase 4).
 
-- [ ] **4.4 Wire `TNetHost` into `TEngineHost`.** Optional slot: a
+- [x] **4.4 Wire `TNetHost` into `TEngineHost`.** Optional slot: a
   `TEngineHost` constructor overload accepts a `TNetHost&` (caller-owned) and
   the canonical frame order from section 4 becomes fully live (receive pump
   first, send pump last). Add one engine-level test: two `TEngineHost`
@@ -1144,6 +1144,35 @@ via `ENetHostState GetState() const noexcept`.
   server world — the "concept proof" that net + engine compose.
 
   **Done when:** test passes; frame order documented in `EngineHost.h`.
+
+  **Completed (2026-07-21):** `CheckDependencyBoundaries.py` forbids `Engine → Net`
+  (Engine may reach only Core/Memory/Object), so the literal `TNetHost&` parameter
+  cannot be written; instead added engine-owned `Engine/NetworkFrame.h` with
+  `INetworkFrame` (`TickDispatch`/`TickFlush`, mirroring UE5 `UNetDriver`) plus a
+  caller-side `TNetHostFrame<TNet>` adapter forwarding to `PumpReceive`/`PumpSend`.
+  `TEngineHost` gained an `INetworkFrame&` constructor overload (null default keeps
+  the slot optional, so every existing standalone host is unchanged); `Tick` steps
+  1 and 7 now drive the frame, and the full seven-step order is documented in
+  `EngineHost.h`. The concept proof
+  (`EngineNetHostClientMessageSpawnsActorOnServerWorld`) drives two `TEngineHost` +
+  two `TNetHost` over one `FHostLoopback` through the live frame slots: the client
+  connects, then a channel-1 message dispatches server-side and spawns an actor in
+  the server world at the same frame's barrier (asserted via begin-count and store
+  occupancy; the client spawns nothing). A second case
+  (`EngineHostTickDrivesBoundNetworkFrameDispatchThenFlush`) pins dispatch-before-
+  flush ordering and that a rejected tick drives neither slot. Net links PRIVATE
+  into the engine TEST target only (guarded `add_subdirectory`); production
+  `microworld_engine` stays net-free. Verify evidence: clean GCC 16.1.0 build (zero
+  warnings), `ctest` 1/1 Passed, runner `[SUMMARY] 80 tests, 0 failures` (78 from
+  3.4, +2), CheckClassDocumentation passed (26 files), CheckDependencyBoundaries
+  passed (3 packages, 33 files — Engine still net-free),
+  `clang-format --style=file:clang-format --dry-run --Werror` exit 0 (clean; also
+  fixed one pre-existing `RegisterClass<T>` line wrap). Files changed:
+  `lib/microworld-engine/include/MicroWorld/Engine/NetworkFrame.h` (new),
+  `lib/microworld-engine/include/MicroWorld/Engine/EngineHost.h`,
+  `lib/microworld-engine/tests/EngineNetHostTests.cpp` (new),
+  `lib/microworld-engine/CMakeLists.txt`, `lib/microworld/PROGRESS.md`,
+  `MICROWORLD_ROADMAP.md`. Phase 4 (4.1–4.4) complete.
 
 ---
 
@@ -1250,7 +1279,7 @@ of its tasks starts, ✅ only when all its tasks are `[x]`.
 | 1 | Consolidation: one Actor model | 1.1–1.4 | ✅ |
 | 2 | Runtime Spawn & Destroy | 2.1–2.4 | ✅ |
 | 3 | Composition root & logging | 3.1–3.4 | ✅ |
-| 4 | Networking with roles | 4.1–4.4 | 🟨 |
+| 4 | Networking with roles | 4.1–4.4 | ✅ |
 | 5 | Platform adapters | 5.1–5.3 | ⬜ |
 | 6 | Examples, measurement, release | 6.1–6.4 | ⬜ |
 
