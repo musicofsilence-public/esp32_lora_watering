@@ -240,9 +240,10 @@ Frame order inside `TEngineHost::Tick(now)` (fixed, documented, tested):
 1. `NetHost.PumpReceive(now)` — drain driver, dispatch messages, update peers
 2. `Timers.Advance(now)` — fire due timer callbacks
 3. `World.Advance(now)` — components tick, then actors
-4. `World.ApplyPending(now)` — pending spawns begin play; pending destroys end play + release
-5. GC slice — `RequestCollection()` when idle (policy: every tick), then `Advance(Budget)`
-6. `NetHost.PumpSend(now)` — flush outbound FIFO, heartbeats
+4. `World.ApplyPending(now)` — pending spawns begin play; pending destroys end play, are removed from the live set, and are marked for destruction on the store
+5. Reclamation slice — `Store.ApplyPendingDestroy(Budget)`: runs `BeginDestroy` + the exact destructor for the actors/components step 4 marked, freeing their slots. Bounded and caller-driven, like the GC slice. (Decision 2026-07-21, option a: the incremental GC's sweep intentionally skips pending-destroy slots, so this explicit step — not GC mark/sweep — is what reclaims destroyed actors.)
+6. GC slice — `RequestCollection()` when idle (policy: every tick), then `Advance(Budget)` — reclaims other unreachable objects
+7. `NetHost.PumpSend(now)` — flush outbound FIFO, heartbeats
 
 ---
 
@@ -663,16 +664,17 @@ std::size_t PendingDestroyCount() const noexcept;
   not yet registered; destroy does not cancel a spawn). Tested as-is; no new
   decision needed.
 
-  ⚠️ **Plan/implementation discrepancy flagged (see section 6, PROPOSED
-  2026-07-21).** The section-4 frame order and the section-2 design say the GC
+  ⚠️ **Plan/implementation discrepancy found and RESOLVED (see section 6,
+  2026-07-21).** The section-4 frame order and the section-2 design said the GC
   slice reclaims the "released" (pending-destroy) actors, but the object store's
   GC sweep explicitly *skips* pending-destroy slots
   ([GarbageCollector.cpp](lib/microworld-object/src/GarbageCollector.cpp) sweep
   phase) — reclamation of destroyed actors is the store's `ApplyPendingDestroy`
   barrier, not GC mark/sweep. The tests document the real mechanism (GC accounts
   roots+worklist and leaves pending-destroy to the store; `ApplyPendingDestroy`
-  reclaims). This affects Phase 3's `TEngineHost` frame order; owner input
-  requested before 3.2.
+  reclaims). Owner chose **option (a)**: section 4 now has an explicit bounded
+  reclamation slice (`Store.ApplyPendingDestroy`) before the GC slice, to be
+  wired into `TEngineHost` in Phase 3.2.
 
   Evidence: `build/host-eng` builds clean under strict warnings
   (`-Wall -Wextra -Wpedantic -Werror -fno-exceptions -fno-rtti`); CTest 1/1;
@@ -1042,7 +1044,7 @@ platform-free (dependency checker must keep passing).
 | 2026-07-20 | **Merge tasks 1.2 + 1.3 into one combined step** (delete the retired headers/sources *and* migrate/delete every retired-type dependent together), because 1.2's Done-when (green `build/host-core`) cannot hold while 1.3's dependents still `#include` the deleted headers. The Core build goes green once, at the end of the combined step. | Owner |
 | 2026-07-20 | **PROPOSED (awaiting owner):** `lib/microworld/docs/diagrams` has no `AGENTS.md`, so the prescribed `CheckFolderAgents.py` strict run fails. Pre-existing (predates Phase 1), unrelated to the retirement. Options: (a) add a short `docs/diagrams/AGENTS.md`, (b) add `--exclude diagrams` to the prescribed invocation, or (c) accept it as a generated-assets directory needing no guide (per `tools/AGENTS.md`, the folder check is "not a policy requiring every future package subdirectory to add a local guide"). | PROPOSED |
 | 2026-07-21 | Phase 2.2 marking of a destroyed actor's components: the store blocks `MarkPendingDestroy` under the dispatch guard `DispatchEndPlay` runs within, and that method is shared with non-destroying world `EndPlay`. Chose **option A** (simplest that works): keep `DispatchEndPlay` pure; `ApplyPending` ends doomed actors under the guard, then marks their components + the actor for destroy after releasing it (new `UWorld`-friend `AActor` helper). Option B (unguarded destroy cascade + a "being destroyed" flag) rejected — it loses reentrancy protection. | Owner |
-| 2026-07-21 | **PROPOSED (awaiting owner):** who reclaims a destroyed actor's slot. Surfaced writing 2.3. Section 4's frame order (step 5 "GC slice") and section 2's design ("`MarkPendingDestroy` is called on the store so GC reclaims it") assume the incremental collector reclaims released actors, but `FGarbageCollector`'s sweep explicitly *skips* pending-destroy slots — those are reclaimed only by the store's `ApplyPendingDestroy` barrier. So the section-4 frame order is missing an `ApplyPendingDestroy` step; GC alone will never free a destroyed actor. Options: (a) add an explicit `World.ApplyPendingDestroy`/`Store.ApplyPendingDestroy` step to the `TEngineHost` frame order in Phase 3 (bounded per frame, like the GC slice); (b) have `UWorld::ApplyPending` itself run a bounded `ApplyPendingDestroy` after marking (couples the barrier to reclamation); (c) revise the section-4 wording only if a different reclamation model is intended. 2.3 tests the real mechanism (a/b-agnostic: store barrier reclaims) and does not decide this. | PROPOSED |
+| 2026-07-21 | **RESOLVED — who reclaims a destroyed actor's slot.** Surfaced writing 2.3: section 4's old frame order and section 2's design assumed the incremental collector reclaims released actors, but `FGarbageCollector`'s sweep explicitly *skips* pending-destroy slots — those are reclaimed only by the store's `ApplyPendingDestroy` barrier, so the frame order was missing a step (GC alone never frees a destroyed actor). Owner chose **option (a)** (simplest + most reliable): add an explicit, bounded `Store.ApplyPendingDestroy(Budget)` reclamation slice to the `TEngineHost` frame order (now section 4 step 5), keeping `UWorld::ApplyPending` single-purpose and the already-tested Phase 2 code untouched. Rejected: (b) run reclamation inside `UWorld::ApplyPending` — couples the structural barrier to store reclamation and buries the budget; (c) reword only — leaves GC unable to reclaim destroyed actors. Implemented as a spec in section 4; wired for real in Phase 3.2. | Owner |
 
 Add a row here whenever a task forces a design choice not covered by this plan.
 
