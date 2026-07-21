@@ -1060,12 +1060,42 @@ via `ENetHostState GetState() const noexcept`.
   `lib/microworld/tests/consumer/src/NetConsumerProbe.h`, `MICROWORLD_ROADMAP.md`.
   No `PROGRESS.md` row (phase not yet ✅). Tasks 4.2–4.4 not started.
 
-- [ ] **4.2 Message framing + session control.** New `Net/NetProtocol.h` with
+- [x] **4.2 Message framing + session control.** New `Net/NetProtocol.h` with
   header/read/write helpers and control-message encode/decode built on
   ByteWriter/Reader. Pure functions, fully unit-tested (round trip, truncation,
   bad flags, unknown control type).
 
   **Done when:** framing tests pass; no allocation; all failures transactional.
+
+  **Completed (2026-07-21):** Added header-only `Net/NetProtocol.h` with the
+  4-byte `[Channel][Flags][PayloadBytes LE][Payload]` message frame and the
+  channel-0 control-message encode/decode, all pure `inline noexcept` functions
+  composed on `FByteWriter`/`FByteReader` (no driver/addressing/logging).
+  `WriteMessage` pre-checks total capacity before the first `WriteByte` so a
+  `Full`/`Invalid` leaves the writer cursor and accepted bytes unchanged;
+  `ReadMessage` parses one whole packet via direct indexing, writing outputs
+  only on `Success`; `WriteControlMessage` builds the per-type payload in a
+  fixed local array and delegates to `WriteMessage` (DRY);
+  `ReadControlMessage` uses a local `FByteReader`, validates the type byte
+  against {Hello,Welcome,Heartbeat,Bye}, enforces the exact per-type payload
+  length (Hello==2, Welcome==4, Heartbeat==1, Bye==1), and writes outputs only
+  on `Success`. Added 18 unit cases in `tests/NetProtocolTests.cpp` covering
+  app-message round trips (empty/1-byte/multi-byte), `WriteMessage` Full and
+  oversized-length rejection, `ReadMessage` truncated header / size mismatch /
+  nonzero-flags rejection, all four control-message round trips, unknown-type
+  and empty/malformed-control rejection, and `WriteControlMessage` unknown-type
+  rejection. Extended `NetAllocationTests.cpp`'s
+  `NetOperationsPerformNoObservableAllocation` case to exercise all four
+  framing functions inside its counted region (zero-delta). Verify evidence:
+  clean GCC 16.1.0 build (zero warnings), `ctest` 1/1 Passed, runner
+  `[SUMMARY] 75 tests, 0 failures`, CheckClassDocumentation passed (18 files),
+  CheckDependencyBoundaries passed (1 package, 10 files), `clang-format
+  --style=file:clang-format --dry-run --Werror` exit 0 (clean). Files changed:
+  `lib/microworld-net/include/MicroWorld/Net/NetProtocol.h` (new),
+  `lib/microworld-net/tests/NetProtocolTests.cpp` (new),
+  `lib/microworld-net/tests/NetAllocationTests.cpp`,
+  `lib/microworld-net/CMakeLists.txt`, `MICROWORLD_ROADMAP.md`. No
+  `PROGRESS.md` row. Task 4.3 not started.
 
 - [ ] **4.3 `TNetHost` with roles.** Implement per the design. Tests (over
   multi-endpoint loopback): server admits client (Hello→Welcome), peer table

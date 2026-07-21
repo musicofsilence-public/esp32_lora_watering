@@ -9,6 +9,7 @@
 #include <MicroWorld/Net/NetDriver.h>
 #include <MicroWorld/Net/NetManager.h>
 #include <MicroWorld/Net/NetPacketStorage.h>
+#include <MicroWorld/Net/NetProtocol.h>
 #include <MicroWorld/Net/NetResult.h>
 
 #include <array>
@@ -18,17 +19,24 @@
 namespace
 {
 
+using MicroWorld::EControlMessageType;
 using MicroWorld::ENetResult;
 using MicroWorld::FByteReader;
 using MicroWorld::FByteWriter;
+using MicroWorld::FControlMessage;
 using MicroWorld::FHostLoopback;
+using MicroWorld::FMessageHeader;
 using MicroWorld::FNetAddress;
 using MicroWorld::FNetManager;
 using MicroWorld::FNetPacketStorage;
 using MicroWorld::FNetReceiveResult;
 using MicroWorld::INetDriver;
 using MicroWorld::MakeLoopbackAddress;
+using MicroWorld::ReadControlMessage;
+using MicroWorld::ReadMessage;
 using MicroWorld::TSpan;
+using MicroWorld::WriteControlMessage;
+using MicroWorld::WriteMessage;
 using MicroWorld::Tests::GlobalAllocationCount;
 
 /**
@@ -51,6 +59,9 @@ MW_TEST_CASE(NetOperationsPerformNoObservableAllocation)
 	const FNetAddress Port0 = MakeLoopbackAddress(0);
 	FNetPacketStorage<2, 8> ManagerStorage;
 	FNetManager<2, 8> Manager(Loopback.Port(0), ManagerStorage);
+	// Framing buffers live outside the counted region so only steady-state framing work is measured.
+	std::array<std::uint8_t, 16> FramingBuffer{};
+	const std::array<std::uint8_t, 3> FramingPayload{0xC0, 0xC1, 0xC2};
 
 	// Capture the counter only after every fixed-storage object is constructed.
 	const std::uint32_t AllocationsBefore = GlobalAllocationCount;
@@ -99,6 +110,26 @@ MW_TEST_CASE(NetOperationsPerformNoObservableAllocation)
 	std::array<std::uint8_t, 4> EmptyDestination{};
 	FNetAddress EmptyFrom{};
 	(void)Loopback.Port(0).TryReceive(EmptyFrom, TSpan<std::uint8_t>(EmptyDestination.data(), EmptyDestination.size()), EmptyReceive);
+
+	// Exercise the message-framing path: write/read an application message and a control message.
+	FByteWriter FrameWriter(TSpan<std::uint8_t>(FramingBuffer.data(), FramingBuffer.size()));
+	(void)WriteMessage(FrameWriter, std::uint8_t{7}, TSpan<const std::uint8_t>(FramingPayload.data(), FramingPayload.size()));
+	FMessageHeader FrameHeader{};
+	TSpan<const std::uint8_t> FramePayload{};
+	(void)ReadMessage(FrameWriter.WrittenBytes(), FrameHeader, FramePayload);
+
+	FByteWriter ControlWriter(TSpan<std::uint8_t>(FramingBuffer.data(), FramingBuffer.size()));
+	FControlMessage Outgoing{};
+	Outgoing.Type = EControlMessageType::Welcome;
+	Outgoing.ProtocolVersion = 1;
+	Outgoing.PeerIndex = 2;
+	Outgoing.PeerGeneration = 3;
+	(void)WriteControlMessage(ControlWriter, Outgoing);
+	FMessageHeader ControlHeader{};
+	TSpan<const std::uint8_t> ControlPayload{};
+	(void)ReadMessage(ControlWriter.WrittenBytes(), ControlHeader, ControlPayload);
+	FControlMessage DecodedControl{};
+	(void)ReadControlMessage(ControlPayload, DecodedControl);
 
 	const std::uint32_t AllocationsAfter = GlobalAllocationCount;
 	MW_EXPECT_EQ(Test, AllocationsBefore, AllocationsAfter, "Steady-state Net operations must not allocate");
