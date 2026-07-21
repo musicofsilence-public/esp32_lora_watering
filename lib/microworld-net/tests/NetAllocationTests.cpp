@@ -39,7 +39,6 @@ using MicroWorld::Tests::GlobalAllocationCount;
 MW_TEST_CASE(NetOperationsPerformNoObservableAllocation)
 {
 	std::array<std::uint8_t, 8> WriterStorage{};
-	std::array<std::uint8_t, 8> ReadDestination{};
 	const std::array<std::uint8_t, 8> Source{0x10, 0x20, 0x30, 0x40, 0x50, 0x60, 0x70, 0x80};
 
 	FByteWriter Writer(TSpan<std::uint8_t>(WriterStorage.data(), WriterStorage.size()));

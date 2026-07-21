@@ -303,14 +303,17 @@ and make this document the recognized plan.
   GCC/Clang + ASan/UBSan runs (consistent with Linux, where `std::aligned_alloc`
   exists), so this is most likely a Windows/MinGW-only baseline gap.
 
-  ⛔ BLOCKED → **Engine portion RESOLVED 2026-07-20; Net portion still open.**
+  ⛔ BLOCKED → **Engine portion RESOLVED 2026-07-20; Net portion RESOLVED 2026-07-21.**
   The Engine suite was fixed during the merged 1.2+1.3 step by broadening the
   `AllocateAligned` guard in `EngineAllocationCounters.cpp` from `_MSC_VER` to
   `_WIN32` (MinGW then uses `_aligned_malloc`); `build/host-eng` now builds and
-  passes here. The **Net** (`build/host-net`) suite still fails to build — same
-  `std::aligned_alloc` gap in `NetAllocationCounters.cpp`, plus one
-  `-Werror=unused-variable` in `NetAllocationTests.cpp` — and still blocks
-  **4.1–4.4** until fixed the same way in Phase 4.
+  passes here. The **Net** (`build/host-net`) suite was fixed the same way on
+  2026-07-21: broadened the `AllocateAligned`/`FreeAligned` guards in
+  `NetAllocationCounters.cpp` from `_MSC_VER` to `_WIN32` (MinGW then uses
+  `_aligned_malloc` instead of the absent `std::aligned_alloc`), and removed
+  the unused `ReadDestination` variable in `NetAllocationTests.cpp` that tripped
+  `-Werror=unused-variable`. `build/host-net` now builds and passes 52/0 here,
+  unblocking **4.1–4.4**.
 
 - [x] **0.2 Register this plan in governance docs.** Edit `AGENTS.md` (root)
   and `lib/AGENTS.md`: state that `MICROWORLD_ROADMAP.md` is the improvement
