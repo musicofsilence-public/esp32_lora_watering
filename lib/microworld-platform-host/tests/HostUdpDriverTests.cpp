@@ -148,12 +148,13 @@ MW_TEST_CASE(HostUdpDriverFullReceiveStaysTransactional)
 		"Sending the oversized-for-small-dest datagram succeeds");
 	ExpectReadable(Test, DriverB, "B observes the queued datagram");
 
-	// A too-small destination triggers the Full path; BytesReceived and OutFrom
-	// must be unchanged. (The sizing peek may write truncated bytes into the
-	// caller's buffer on Windows MSG_PEEK+WSAEMSGSIZE, so destination bytes are
-	// not asserted here; the queue-not-consumed proof below is the load-bearing
-	// transactional claim.)
+	// Pre-fill the too-small destination with a known sentinel pattern so a Full
+	// result can be proven to leave every caller-owned byte untouched.
 	std::array<std::uint8_t, 4> SmallDestination{};
+	for (std::size_t Index = 0; Index < SmallDestination.size(); ++Index)
+	{
+		SmallDestination[Index] = 0xAB;
+	}
 	FNetAddress OutFrom{};
 	OutFrom.Size = 0x42;
 	FNetReceiveResult OutResult{0xEE};
@@ -164,6 +165,15 @@ MW_TEST_CASE(HostUdpDriverFullReceiveStaysTransactional)
 		"A too-small destination reports Full");
 	MW_EXPECT_EQ(Test, std::uint8_t{0x42}, OutFrom.Size, "Full leaves the sender sentinel unchanged");
 	MW_EXPECT_EQ(Test, std::size_t{0xEE}, OutResult.BytesReceived, "Full leaves the byte-count sentinel unchanged");
+	bool DestinationUntouched = true;
+	for (std::size_t Index = 0; Index < SmallDestination.size(); ++Index)
+	{
+		if (SmallDestination[Index] != 0xAB)
+		{
+			DestinationUntouched = false;
+		}
+	}
+	MW_EXPECT_TRUE(Test, DestinationUntouched, "Full leaves every caller-owned destination byte unchanged");
 
 	std::array<std::uint8_t, 256> LargeDestination{};
 	FNetAddress OutFromSecond{};

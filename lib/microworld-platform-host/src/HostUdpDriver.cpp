@@ -103,6 +103,9 @@ ENetResult FHostUdpDriver::TrySend(const FNetAddress& To, TSpan<const std::uint8
 
 ENetResult FHostUdpDriver::TryReceive(FNetAddress& OutFrom, TSpan<std::uint8_t> Destination, FNetReceiveResult& OutResult) noexcept
 {
+	// Keep the sizing scratch and the advertised max in lockstep; both are 1200.
+	static_assert(Detail::PeekScratchBytes == FHostUdpDriver::UdpMaxPacketBytes, "Peek scratch must match the advertised packet maximum.");
+
 	if (!bOpen)
 	{
 		return ENetResult::Unavailable;
@@ -113,18 +116,21 @@ ENetResult FHostUdpDriver::TryReceive(FNetAddress& OutFrom, TSpan<std::uint8_t> 
 	{
 		return ENetResult::Invalid;
 	}
-	// Peek to size the head datagram without consuming, so Full leaves it queued.
-	const Detail::FPeekProbe Probe = Detail::ProbeReadableDatagram(Detail::AsSocketHandle(SocketHandle), Destination.Data(), Capacity);
+	// Size the head datagram without consuming or touching the caller's destination.
+	const Detail::FPeekProbe Probe = Detail::ProbeReadableDatagram(Detail::AsSocketHandle(SocketHandle));
 	switch (Probe.Status)
 	{
 		case Detail::EPeekStatus::WouldBlock:
 			return ENetResult::Unavailable;
-		case Detail::EPeekStatus::TooLarge:
-			return ENetResult::Full;
 		case Detail::EPeekStatus::Error:
 			return ENetResult::Invalid;
 		case Detail::EPeekStatus::Ready:
 			break;
+	}
+	// Single fits-vs-Full decision: the caller's destination is untouched on Full.
+	if (Probe.BytesReady > Capacity)
+	{
+		return ENetResult::Full;
 	}
 	// The datagram fits: perform one consuming read to deliver the bytes and the sender.
 	sockaddr_in Sender{};

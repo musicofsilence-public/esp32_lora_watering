@@ -217,12 +217,10 @@ inline ESendOutcome SendDatagram(const FSocketHandle Socket, const std::uint8_t*
 /** Normalized result of a non-consuming peek at the head datagram. */
 enum class EPeekStatus : std::uint8_t
 {
-	/** A datagram fits the destination; `BytesReady` is its length. */
+	/** A datagram is queued; `BytesReady` carries its true length. */
 	Ready,
 	/** No datagram is ready right now. */
 	WouldBlock,
-	/** A datagram exists but exceeds the destination; it stays queued. */
-	TooLarge,
 	/** A socket error occurred. */
 	Error,
 };
@@ -235,29 +233,40 @@ struct FPeekProbe
 	/** Classifies what the non-consuming peek observed. */
 	EPeekStatus Status;
 
-	/** Valid only when `Status == Ready`; the byte count a consume will deliver. */
+	/** Valid only when `Status == Ready`; the true byte count of the queued datagram. */
 	std::size_t BytesReady;
 };
 
 /**
- * Peeks the head datagram without consuming it, classifying the outcome.
+ * Largest datagram the sizing peek can observe without an overflow error.
  *
- * Windows reports an oversize datagram as `WSAEMSGSIZE` on `MSG_PEEK` and leaves
- * it queued; POSIX reports the true length via `MSG_TRUNC` on `MSG_PEEK`. Either
- * way the caller can decide `Full` vs `Unavailable` vs `Success` platform-free.
+ * Mirrors `FHostUdpDriver::UdpMaxPacketBytes` (kept in sync by a `static_assert`
+ * in `HostUdpDriver.cpp`); the sizing peek never reads more than this, so it is
+ * also the largest payload one send accepts.
+ */
+constexpr std::size_t PeekScratchBytes = 1200;
+
+/**
+ * Peeks the head datagram into an internal scratch buffer, never the caller's.
+ *
+ * POSIX `MSG_PEEK|MSG_TRUNC` returns the true datagram length in `BytesReady`.
+ * Windows `MSG_PEEK` returns the delivered length, or `WSAEMSGSIZE` when the
+ * datagram exceeds the scratch; that case is reported `Ready` with a sentinel
+ * `BytesReady = PeekScratchBytes + 1` so the single fits-vs-`Full` decision in
+ * the driver sees one uniform "does not fit" signal. The peek never touches the
+ * caller-owned destination, keeping `Full` transactional on both platforms.
  *
  * @param Socket Open non-blocking socket.
- * @param Destination Caller-owned buffer that the peek may partially fill.
- * @param Capacity Byte capacity of `Destination`.
- * @return Peek classification with length when a datagram fits.
+ * @return Peek classification with the true datagram length when `Ready`.
  */
-inline FPeekProbe ProbeReadableDatagram(const FSocketHandle Socket, std::uint8_t* const Destination, const std::size_t Capacity) noexcept
+inline FPeekProbe ProbeReadableDatagram(const FSocketHandle Socket) noexcept
 {
+	std::uint8_t Scratch[PeekScratchBytes];
 	sockaddr_storage Sender{};
 	FSockLen SenderLen = sizeof(Sender);
 #ifdef _WIN32
 	const int Peeked = recvfrom(
-		Socket, reinterpret_cast<char*>(Destination), static_cast<int>(Capacity), MSG_PEEK, reinterpret_cast<sockaddr*>(&Sender), &SenderLen);
+		Socket, reinterpret_cast<char*>(Scratch), static_cast<int>(PeekScratchBytes), MSG_PEEK, reinterpret_cast<sockaddr*>(&Sender), &SenderLen);
 	if (Peeked == SOCKET_ERROR)
 	{
 		const int Error = WSAGetLastError();
@@ -267,14 +276,15 @@ inline FPeekProbe ProbeReadableDatagram(const FSocketHandle Socket, std::uint8_t
 		}
 		if (Error == WSAEMSGSIZE)
 		{
-			return FPeekProbe{EPeekStatus::TooLarge, 0};
+			// Datagram exceeds even the scratch; signal "does not fit" for the driver's single decision site.
+			return FPeekProbe{EPeekStatus::Ready, PeekScratchBytes + 1};
 		}
 		return FPeekProbe{EPeekStatus::Error, 0};
 	}
 	return FPeekProbe{EPeekStatus::Ready, static_cast<std::size_t>(Peeked)};
 #else
 	const ssize_t Peeked =
-		recvfrom(Socket, reinterpret_cast<char*>(Destination), Capacity, MSG_PEEK | MSG_TRUNC, reinterpret_cast<sockaddr*>(&Sender), &SenderLen);
+		recvfrom(Socket, reinterpret_cast<char*>(Scratch), PeekScratchBytes, MSG_PEEK | MSG_TRUNC, reinterpret_cast<sockaddr*>(&Sender), &SenderLen);
 	if (Peeked < 0)
 	{
 		const int Error = errno;
@@ -283,10 +293,6 @@ inline FPeekProbe ProbeReadableDatagram(const FSocketHandle Socket, std::uint8_t
 			return FPeekProbe{EPeekStatus::WouldBlock, 0};
 		}
 		return FPeekProbe{EPeekStatus::Error, 0};
-	}
-	if (static_cast<std::size_t>(Peeked) > Capacity)
-	{
-		return FPeekProbe{EPeekStatus::TooLarge, 0};
 	}
 	return FPeekProbe{EPeekStatus::Ready, static_cast<std::size_t>(Peeked)};
 #endif
