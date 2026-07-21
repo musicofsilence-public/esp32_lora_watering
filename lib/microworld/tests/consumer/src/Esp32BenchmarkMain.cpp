@@ -37,8 +37,10 @@
 #include <MicroWorld/PlatformEsp32/Esp32UdpDriver.h>
 #include <MicroWorld/Time.h>
 
+#include <esp_event.h>
 #include <esp_heap_caps.h>
 #include <esp_log.h>
+#include <esp_netif.h>
 #include <esp_timer.h>
 
 #include <freertos/FreeRTOS.h>
@@ -360,27 +362,53 @@ extern "C" void app_main()
 		static_cast<unsigned>(RepresentativeComponentCount),
 		static_cast<unsigned>(RepresentativeTimerCount));
 
+	// 0.5. Bring up the lwIP TCP/IP stack before any socket is created. The UDP driver's
+	//      socket()/bind() asserts inside lwIP ("Invalid mbox") if the tcpip task and the
+	//      default event loop are not running first; no WiFi association is needed for a
+	//      bound, pollable socket. Initialized before the heap baseline so this ESP-IDF
+	//      infrastructure is not charged to the world-setup heap delta measured below.
+	if (esp_netif_init() != ESP_OK)
+	{
+		ESP_LOGE(BenchmarkTag, "setup FAILED: esp_netif_init rejected");
+		BenchmarkSinkResult = 11;
+		return;
+	}
+	if (esp_event_loop_create_default() != ESP_OK)
+	{
+		ESP_LOGE(BenchmarkTag, "setup FAILED: esp_event_loop_create_default rejected");
+		BenchmarkSinkResult = 12;
+		return;
+	}
+
 	const std::uint32_t FreeHeapBeforeSetup = esp_get_free_heap_size();
 	ESP_LOGI(BenchmarkTag, "mem: free_heap_before_setup=%lu bytes", static_cast<unsigned long>(FreeHeapBeforeSetup));
 
 	// 1. The single real clock; esp_timer feeds the engine's caller-supplied monotonic time.
 	FEsp32TimeSource Clock;
 
-	// 2. One non-blocking UDP socket on INADDR_ANY:5000; no netif/WiFi is initialized.
-	FEsp32UdpDriver Driver(5000);
+	// The composition objects below (UDP driver, net host, frame, engine host, and the GC probe)
+	// are placed in STATIC storage, not on the stack. The ESP-IDF main task stack is only 3584
+	// bytes, but TEngineHost embeds its fixed object storage inline (MaxObjects * SlotBytes) and
+	// the GC probe embeds its own slot bytes, which together far exceed that; a stack frame this
+	// large faults during the first register-window spill. Static .bss placement matches
+	// MicroWorld's bounded caller-owned-storage model and keeps the main task stack small.
+
+	// 2. One non-blocking UDP socket on INADDR_ANY:5000 over the TCP/IP stack brought up above;
+	//    no WiFi is associated, so the socket binds and polls but no datagram can route.
+	static FEsp32UdpDriver Driver(5000);
 
 	// 3. A dedicated-server session host over that driver, started at boot time.
-	FBenchmarkNet Net(Driver);
+	static FBenchmarkNet Net(Driver);
 	(void)Net.Configure(ENetMode::DedicatedServer, FNetHostConfig{});
 	Net.Start(Clock.Now());
 
 	// 4. Adapt the host to the engine's network frame seam.
-	TNetHostFrame<FBenchmarkNet> Frame(Net);
+	static TNetHostFrame<FBenchmarkNet> Frame(Net);
 
 	// 5. Composition root. Budget {1,4,32}: MaxSweepOperations(32) >= MaxObjects(32) so one
 	//    Tick completes a full GC cycle each frame — no mid-cycle mutation lock during the
 	//    measured loop (safe because all spawning happens in this setup phase).
-	FBenchmarkHost Host{FGarbageCollectionBudget{1, 4, 32}, Frame};
+	static FBenchmarkHost Host{FGarbageCollectionBudget{1, 4, 32}, Frame};
 
 	(void)Host.RegisterClass<FBenchActor>(BenchActorTypeId, "BenchActor");
 	(void)Host.RegisterClass<FBenchComponent>(BenchComponentTypeId, "BenchComponent");
@@ -395,7 +423,7 @@ extern "C" void app_main()
 
 	// 6. Spawn the representative population: 8 actors, each leasing a 2-component view,
 	//    with 16 components attached two-per-actor. All spawning finishes before BeginPlay.
-	std::array<FActorComponentRegistry<2>, RepresentativeActorCount> ActorComponentStorages{};
+	static std::array<FActorComponentRegistry<2>, RepresentativeActorCount> ActorComponentStorages{};
 	for (std::size_t ActorIndex = 0; ActorIndex < RepresentativeActorCount; ++ActorIndex)
 	{
 		const TObjectPtr<FBenchActor> Actor = Host.CreateObject<FBenchActor>(BenchActorTypeId, ActorComponentStorages[ActorIndex].MakeView()).Object;
@@ -459,7 +487,7 @@ extern "C" void app_main()
 	}
 
 	// 8. Construct the standalone GC probe used to isolate one Advance slice.
-	FGcProbe GcProbe;
+	static FGcProbe GcProbe;
 	if (!GcProbe.IsReady())
 	{
 		ESP_LOGE(BenchmarkTag, "setup FAILED: GC probe not ready");
