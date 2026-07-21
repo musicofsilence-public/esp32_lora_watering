@@ -1417,6 +1417,29 @@ platform-free (dependency checker must keep passing).
   actors / 16 components / 8 timers / GC budget slice), max GC pause per
   budget unit, net pump cost, RAM/flash of the full image. Record in the
   package `benchmarks/Results/` files and PROGRESS.md.
+  **Part A landed (2026-07-21):** the compile-verified on-target measurement
+  harness is `lib/microworld/tests/consumer/src/Esp32BenchmarkMain.cpp`, and
+  `[env:esp32-s3-benchmark]` is re-pointed at the full platform-esp32 stack
+  (Engine+Net+PlatformEsp32, `-Os`, release) with a single-file
+  `build_src_filter`. It builds the representative world (8 actors / 16
+  components / 8 timers, all spawned in setup before BeginPlay so the
+  in-loop GC slice never hits the mutation lock), a standalone
+  `FObjectStore`+`FGarbageCollector` probe sized so one `Advance` is a
+  measurable slice (budget `{1,1,8}` over 32 slots), and a no-traffic net
+  pump, then prints labeled lines over serial at 115200:
+  `tick` (min/mean/max µs over 1000 iterations), `gc` (min/mean/max µs per
+  slice + slices-in-cycle + budget), `net_pump` (mean µs, labeled
+  no-traffic overhead), and `mem` (free heap before/after setup + stack
+  high-water mark). Static image RAM/Flash are read from the build summary
+  (benchmark env: RAM 6.6% / 21,772 B, Flash 6.9% / 289,217 B). **No
+  measured runtime numbers yet** — Part B (human-authorized flash) captures
+  them. Capture commands:
+  ```sh
+  pio run -d lib/microworld/tests/consumer -e esp32-s3-benchmark -t upload
+  pio device monitor -d lib/microworld/tests/consumer -e esp32-s3-benchmark
+  ```
+  then transcribe the labeled lines into
+  `lib/microworld/benchmarks/Results/Esp32S3N16R8.md`.
 
 - [ ] **6.3 Documentation release sweep.** Update: `lib/microworld/README.md`,
   `lib/microworld-engine/README.md`, `lib/microworld-net/README.md`,

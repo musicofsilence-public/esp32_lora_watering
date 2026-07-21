@@ -34,6 +34,7 @@ if(
     OR MICROWORLD_CONSUMER_ENVIRONMENT STREQUAL "esp32-s3-engine"
     OR MICROWORLD_CONSUMER_ENVIRONMENT STREQUAL "esp32-s3-net"
     OR MICROWORLD_CONSUMER_ENVIRONMENT STREQUAL "esp32-s3-platform"
+    OR MICROWORLD_CONSUMER_ENVIRONMENT STREQUAL "esp32-s3-benchmark"
 )
     # PlatformIO forwards project build flags to ESP-IDF C sources as well as
     # this C++ component. Keep C++-only portability gates on the target that
@@ -55,13 +56,18 @@ if(
     )
 endif()
 
-if(MICROWORLD_CONSUMER_ENVIRONMENT STREQUAL "esp32-s3-platform")
-    # The platform env is the first consumer to #include ESP-IDF headers from C++
-    # (esp_timer.h, esp_log.h, lwip/sockets.h). ESP-IDF's esp_libc platform
-    # headers (stdio.h, assert.h) use the GCC `#include_next` extension, which
-    # -Wpedantic flags as an error in code the project does not own. Keep the
-    # strict set above but downgrade pedantic to a non-fatal warning for this
-    # env only, so the extension in ESP-IDF system headers does not block the
-    # compile while project code still warns on its own pedantic violations.
+if(
+    MICROWORLD_CONSUMER_ENVIRONMENT STREQUAL "esp32-s3-platform"
+    OR MICROWORLD_CONSUMER_ENVIRONMENT STREQUAL "esp32-s3-benchmark"
+)
+    # The platform env was the first consumer to #include ESP-IDF headers from C++
+    # (esp_timer.h, esp_log.h, lwip/sockets.h); the benchmark env does the same
+    # (esp_timer.h, esp_heap_caps.h, esp_log.h, freertos/task.h). ESP-IDF's
+    # esp_libc platform headers (stdio.h, assert.h) use the GCC `#include_next`
+    # extension, which -Wpedantic flags as an error in code the project does not
+    # own. Keep the strict set above but downgrade pedantic to a non-fatal warning
+    # for these envs only, so the extension in ESP-IDF system headers does not
+    # block the compile while project code still warns on its own pedantic
+    # violations.
     target_compile_options(${COMPONENT_LIB} PRIVATE -Wno-error=pedantic)
 endif()
