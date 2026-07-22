@@ -7,26 +7,15 @@ ESP32 development from first principles. The repository must progress through
 small, observable experiments into production-quality firmware without hiding
 the reasoning, measurements, or safety decisions.
 
-## MicroWorld mission
+## MicroWorld dependency
 
-MicroWorld is a mini engine for microcontrollers: a small, embedded-suitable
-version of familiar UE5 engine concepts. It should let UE5 developers build
-small applications, interactive software, and games for constrained devices
-without first learning every hardware detail.
-
-MicroWorld is not a full UE5 clone. It keeps only essential, bounded features
-such as lifecycle, World/Actor/Component concepts, GC, smart pointers, a simple
-`FNetManager`/`INetDriver` networking layer, and explicit hardware boundaries.
-The runtime must remain lightweight and efficient for ESP32, STM32, Raspberry
-Pi Pico/RP2040-class, and similar microcontrollers. Platform support is a
-direction verified one target at a time, not a claim that every board already
-works.
-
-The package-family mission and engineering boundaries live in
-`lib/AGENTS.md`. `lib/microworld/PROGRESS.md` is the sole live implementation
-status and next-milestone record. `MICROWORLD_ROADMAP.md` (repository root) is
-the MicroWorld improvement plan and task tracker; `lib/microworld/PROGRESS.md`
-remains the evidence record its phases are proven against.
+MicroWorld is a mini engine for microcontrollers, developed and governed in its
+own repository at [`../MicroWorld`](https://github.com/musicofsilence-public/MicroWorld).
+This firmware consumes it as an external dependency through `symlink://`
+`lib_deps` (see `platformio.ini`), so both repositories must be cloned side by
+side. Engine code, its AGENTS rules, `PROGRESS.md` status record, and roadmap
+all live in the MicroWorld repo and are authoritative there. Never add engine
+code under this repository's `lib/`.
 
 The product is behaviorally inspired by the read-only project at
 `C:\Users\Public\Arduino\RadioRemoteController`:
@@ -222,11 +211,8 @@ mutable state, boolean state soup, and hidden hardware side effects.
   deterministic without hidden clock reads.
 - Fixed-capacity storage and bounded work make MCU memory and timing behavior
   reviewable before deployment.
-- MicroWorld is an independent package family under `lib/`: Core, Memory,
-  Object/GC, and Engine are implemented separately. The tutorial may consume a
-  pinned release later but must not redesign the runtime during a lesson.
-- MicroWorld work implements the smallest usable current milestone. Do not add
-  speculative modules, abstractions, or process documents ahead of a real need.
+- MicroWorld is an external dependency (see above); its engineering boundaries
+  are owned by the MicroWorld repo, not this one.
 
 ## Code documentation and formatting
 
@@ -423,10 +409,6 @@ traceability, and Markdown structure instead.
   there as results.
 - `README.md` stays a concise orientation and links to the detailed sources.
 - Checked-in code/config/tests remain authoritative for what is implemented.
-- `lib/microworld/PROGRESS.md` is the sole live MicroWorld status record. Any
-  MicroWorld change to implementation, gate, evidence, decision, blocker, or
-  next milestone must update it in the same commit; reviewers reject changes
-  that omit that update.
 - When an unresolved hardware or protocol decision becomes accepted, update
   this file, the relevant guide section, tests, and decision/measurement log in
   the same change.

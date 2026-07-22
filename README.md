@@ -22,11 +22,12 @@ The controller and valve firmware are not implemented yet. `src/main.cpp` is the
 first ESP-IDF learning exercise: blinking an external LED. No button, E32 link,
 valve driver, or real valve behavior has been validated by this repository.
 
-MicroWorld 0.2.0 is implemented as an independent C++17 package family under
-`lib/microworld` (Core), `lib/microworld-memory`, `lib/microworld-object`,
-`lib/microworld-engine`, `lib/microworld-net`, and the
-`lib/microworld-platform-{host,esp32}` adapter packages. It is not linked into
-`src/main.cpp` and the ESP32 tutorial has not begun consuming it.
+MicroWorld 0.2.0 is an external dependency developed in the sibling repository
+at [`../MicroWorld`](https://github.com/musicofsilence-public/MicroWorld). This
+firmware consumes it through `symlink://` `lib_deps` in `platformio.ini`, so
+both repositories must be cloned side by side:
+`projects/lora` and `projects/MicroWorld`. The engine is not yet linked into
+`src/main.cpp`, and the ESP32 tutorial has not begun consuming it.
 
 ## Confirmed platform
 
@@ -52,7 +53,7 @@ step.
 
 - [Learning guide](docs/esp32-lora-remote-controller-learning-guide.md)
 - [Learning and measurement log](LEARNING_LOG.md)
-- [Standalone MicroWorld framework](lib/microworld/README.md)
+- [MicroWorld engine](https://github.com/musicofsilence-public/MicroWorld)
 - [Contributor and safety rules](AGENTS.md)
 
 ## Safety
