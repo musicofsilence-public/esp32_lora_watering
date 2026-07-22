@@ -1,18 +1,87 @@
 # Porting MicroWorld
 
-MicroWorld requires a C++17 compiler and a small standard-library subset. It
-does not read a clock; the consumer supplies monotonic milliseconds at lifecycle
-and update boundaries.
+MicroWorld targets a new platform through **three adapter seams**. The runtime
+itself is platform-free: it never reads a clock, never opens a socket, and
+never logs to hardware. A port fills those three gaps and otherwise reuses the
+shipped portable packages unchanged. Each seam below names the shipped adapter
+that implements it as a worked reference.
 
-For a new toolchain or board:
+## The three seams
 
-1. compile public headers and a small consumer with strict warnings and without
-   exceptions or RTTI;
-2. confirm selected fixed capacities fit the application image and stack plan;
-3. run unchanged behavior tests where the target supports them; and
-4. record separately what was compiled and what was actually measured on
-   hardware.
+### 1. Time source
 
-Do not replace readable branches, 64-bit time, or virtual hooks with clever
-alternatives until a named measured budget justifies the change. Compile success
-is never a claim about runtime timing, heap, stack, radio, or physical hardware.
+The runtime never reads a clock. Every lifecycle, tick, timer, GC, and net
+deadline takes a caller-supplied
+[`TimePointMilliseconds`](../include/MicroWorld/Time.h) (`std::uint64_t`
+monotonic milliseconds). An adapter reads the real clock and feeds that value
+into `TEngineHost::Tick(Now)` (or the lower-level `Advance(Now)` calls).
+
+- ESP32 reference:
+  [`FEsp32TimeSource`](../../microworld-platform-esp32/include/MicroWorld/PlatformEsp32/Esp32TimeSource.h)
+  wraps `esp_timer_get_time()` and returns `microseconds / 1000`.
+- Host reference:
+  [`FHostTimeSource`](../../microworld-platform-host/include/MicroWorld/PlatformHost/HostTimeSource.h)
+  uses `std::chrono::steady_clock` from a process-local baseline.
+
+### 2. Net driver
+
+Implement
+[`INetDriver`](../../microworld-net/include/MicroWorld/Net/NetDriver.h) with
+two non-blocking, transactional operations — `TrySend(const FNetAddress& To,
+TSpan<const std::uint8_t>)` and `TryReceive(FNetAddress& OutFrom, TSpan<
+std::uint8_t>, FNetReceiveResult&)`. On any non-`Success` result the
+destination and `BytesReceived` must be unchanged. `FNetAddress` is opaque; the
+adapter owns its concrete encoding and provides helpers to build/inspect it.
+
+- Host UDP reference:
+  [`FHostUdpDriver`](../../microworld-platform-host/include/MicroWorld/PlatformHost/HostUdpDriver.h)
+  over a `SOCK_DGRAM` socket on `127.0.0.1`, with
+  [`MakeUdpAddress`/`IsUdpAddress`/`UdpAddressPort`](../../microworld-platform-host/include/MicroWorld/PlatformHost/UdpAddress.h)
+  for the 6-byte IPv4+port encoding.
+- ESP32 UDP reference:
+  [`FEsp32UdpDriver`](../../microworld-platform-esp32/include/MicroWorld/PlatformEsp32/Esp32UdpDriver.h)
+  over lwIP; same three UDP address helpers duplicated verbatim.
+- ESP32 E32 LoRa reference:
+  [`FEsp32E32LoraDriver`](../../microworld-platform-esp32/include/MicroWorld/PlatformEsp32/Esp32E32LoraDriver.h)
+  over the E32 UART, using the portable
+  [`Net/FrameCodec.h`](../../microworld-net/include/MicroWorld/Net/FrameCodec.h)
+  for CRC-16/CCITT-FALSE framing and a 1-byte broadcast
+  [`LoraAddress`](../../microworld-platform-esp32/include/MicroWorld/PlatformEsp32/LoraAddress.h).
+
+### 3. Log sink
+
+Install one
+[`FLogSink`](../include/MicroWorld/Log.h) via `SetLogSink` at startup. The
+default sink is null (logging disabled). The facade is single-threaded; install
+the sink before the first `MW_LOG` / `MW_LOG_MSG` call.
+
+- ESP32 reference:
+  [`Esp32LogSink`](../../microworld-platform-esp32/include/MicroWorld/PlatformEsp32/Esp32LogSink.h)
+  maps each `ELogLevel` to the matching `ESP_LOG*` macro.
+
+## Where the adapter code lives
+
+Adapter code goes in a **non-portable platform package** (e.g.
+`lib/microworld-platform-host`, `lib/microworld-platform-esp32`). Such a
+package:
+
+- may include OS and vendor headers (WinSock, lwIP, ESP-IDF, `<driver/uart.h>`,
+  `<chrono>`, …) and confine them to private `src/*Glue.h` headers;
+- is **excluded from `CheckDependencyBoundaries.py`** — it has no module key in
+  that tool's portable table;
+- **depends inward** on any portable package (Core, Memory, Object, Engine,
+  Net) it needs; the reverse dependency is forbidden.
+
+The portable packages themselves stay free of OS/vendor headers and remain
+under the dependency checker.
+
+## What a port is not
+
+Compile success is never a runtime, timing, heap, stack, or radio claim. A
+newly ported adapter that opens sockets, drives a radio, or holds large fixed
+storage must be smoke-run on the real target before any runtime-readiness
+claim — the Phase 6.2 measurement found two defects that were invisible to the
+compile-only proof (lwIP stack uninitialized before socket use; large
+composition overflowing the main task stack). See the Phase 6.2 decision row
+in `MICROWORLD_ROADMAP.md` §6 and the measured margins in
+[`benchmarks/Results/Esp32S3N16R8.md`](../../microworld-platform-esp32/benchmarks/Results/Esp32S3N16R8.md).

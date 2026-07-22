@@ -2,31 +2,56 @@
 
 ## Unreleased
 
-Memory and Object are implemented candidates; the minimal managed Engine, the
-Simple Timers milestone, and the Simple Net milestone are accepted
-implementation candidates. The bounded Net package added a byte reader/writer
-over caller-owned `TSpan`, one non-blocking `INetDriver`, one caller-storage-
-backed fixed-capacity `FNetManager` over a caller-supplied
-`FNetPacketStorage`, normalized `Success`/`Full`/`Invalid`/`Unavailable`
-semantics, safe rejection of invalid `{nullptr, nonzero}` backing spans,
-transactional receive failures, and a deterministic `FHostLoopback` driver
-(52 behavior cases including recorded-packet FIFO order, exact head retention
-across driver backpressure, recovery, caller-storage wraparound reuse,
-byte-reader valid empty `{nullptr, 0}` suffix view safety, host-loopback
-null-destination-before-empty-queue `Invalid` rejection, and private
-caller-owned packet storage observed only through the matching `FNetManager`
-specialization, plus steady-state zero allocation; strict Core+Memory+Net
-consumer and GCC 16/Clang 19 TU compiles clean). Net depends only on Core and
-Memory; the dependency/profile checkers were corrected to drop stale
-Serialization/Integration assumptions, require the Net archive, and reject
-Object/Engine leakage into the Core+Net profile. The next milestone is one
-ESP32-S3 example. Live state and exact evidence are recorded in
+No unreleased changes. Live state and exact evidence are recorded in
 [PROGRESS.md](PROGRESS.md).
 
-Removed the duplicate Core `TWorld`/`TActor`/`FActorComponent`/`FNetwork` actor
-model; the managed Engine (`UWorld`/`AActor`/`UActorComponent`) is now the sole
-World/Actor/Component API and Core is lifecycle/tick primitives only
-(`FApplication`, `FTickFunction`, `FLifecycleGuard`, `FTickable`).
+## 0.2.0 - 2026-07-21
+
+The 0.2.0 release delivers the managed runtime, networking, and platform
+support around Core. All six roadmap phases are complete; ESP32-S3 runtime
+margins were measured on hardware in Phase 6.2.
+
+- **Core actor-model retirement (Phase 1).** The duplicate Core
+  `TWorld`/`TActor`/`FActorComponent`/`FNetwork` actor model is removed; the
+  managed Engine (`UWorld`/`AActor`/`UActorComponent`) is the sole
+  World/Actor/Component API and Core is lifecycle/tick primitives only
+  (`FApplication`, `FTickFunction`, `FLifecycleGuard`, `FTickable`).
+- **Runtime spawn/destroy (Phase 2).** `UWorld::SpawnActor`/`DestroyActor`
+  queue at the call site and apply at one deferred `ApplyPending` barrier per
+  frame (destroys before spawns); capacity counts live + pending; every
+  rejection is transactional.
+- **Composition root + logging (Phase 3).** `TEngineHost<...>` owns the class
+  registry, object store, garbage collector, world, and timer manager behind
+  one fixed 7-step per-frame order (PumpReceive → Timers.Advance →
+  World.Advance → World.ApplyPending → Store.ApplyPendingDestroy → GC slice →
+  PumpSend). `MW_LOG`/`MW_LOG_MSG` add a bounded logging facade with a
+  compile-time level floor.
+- **Networking with roles (Phase 4).** `TNetHost<MaxPeers, MaxPacketBytes>`
+  runs `ENetMode` Standalone / Client / ListenServer / DedicatedServer over a
+  bounded peer table, with Hello/Welcome admission, heartbeats, timeout
+  eviction, generation-checked `FPeerId`, and channel-based send/receive
+  (channel 0 reserved for control). Engine integrates net through an
+  engine-owned `INetworkFrame` seam so production Engine stays net-free.
+- **Real transports + platform adapters (Phase 5).** Two non-portable adapter
+  packages, both excluded from `CheckDependencyBoundaries.py`: `microworld-platform-host`
+  (`FHostUdpDriver`) and `microworld-platform-esp32` (`FEsp32TimeSource`,
+  `FEsp32UdpDriver`, `FEsp32E32LoraDriver`, `Esp32LogSink`). The portable
+  `Net/FrameCodec.h` (`TFrameDecoder`, `EncodeFrame`, CRC-16/CCITT-FALSE)
+  provides the LoRa wire framing, host-tested off-target.
+- **Two-node demo (Phase 6.1).**
+  `lib/microworld-platform-host/examples/TwoNodeDemo` composes a
+  dedicated-server `TEngineHost` and a bare `TNetHost` client over real
+  localhost UDP in one deterministic interleaved loop.
+- **Measured ESP32-S3 runtime margins (Phase 6.2).** On a connected ESP32-S3 @
+  160 MHz (release `-Os`, image RAM 43,148 B / Flash 313,269 B), the
+  representative world (8 actors / 16 components / 8 timers) measured: tick
+  min 62 / mean 73 / max 114 µs; GC Advance-slice min 21 / mean 25 / max 39 µs
+  (budget `{root=1,mark=1,sweep=8}`); no-traffic net pump mean 47 µs;
+  world-setup heap 580 B; main-task stack 2,476 B free after setup. Recorded
+  in `lib/microworld-platform-esp32/benchmarks/Results/Esp32S3N16R8.md`.
+
+Live state and exact evidence are recorded in
+[PROGRESS.md](PROGRESS.md).
 
 ## 0.1.0 - 2026-07-18
 

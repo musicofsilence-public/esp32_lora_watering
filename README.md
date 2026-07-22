@@ -22,9 +22,11 @@ The controller and valve firmware are not implemented yet. `src/main.cpp` is the
 first ESP-IDF learning exercise: blinking an external LED. No button, E32 link,
 valve driver, or real valve behavior has been validated by this repository.
 
-MicroWorld 0.1.0 is implemented as an independent C++17 package under
-`lib/microworld`. It is not linked into `src/main.cpp` and the ESP32 tutorial
-has not begun consuming it.
+MicroWorld 0.2.0 is implemented as an independent C++17 package family under
+`lib/microworld` (Core), `lib/microworld-memory`, `lib/microworld-object`,
+`lib/microworld-engine`, `lib/microworld-net`, and the
+`lib/microworld-platform-{host,esp32}` adapter packages. It is not linked into
+`src/main.cpp` and the ESP32 tutorial has not begun consuming it.
 
 ## Confirmed platform
 

@@ -1,9 +1,11 @@
 # MicroWorld Net
 
-MicroWorld Net is the bounded non-blocking byte-I/O package above Memory. It
-provides a byte reader/writer, one non-blocking `INetDriver`, one fixed-
-capacity `FNetManager`, explicit `ENetResult` outcomes, and a deterministic
-host loopback driver for embedded applications.
+MicroWorld Net is the bounded non-blocking byte-I/O and simple-messaging
+package above Memory. It provides a byte reader/writer, one non-blocking
+`INetDriver` with `FNetAddress` addressing, one fixed-capacity `FNetManager`,
+explicit `ENetResult` outcomes, a deterministic host loopback driver, a
+header-only wire framing codec, and a session/role host for embedded
+applications.
 
 Current status and recorded evidence live in
 [PROGRESS.md](../microworld/PROGRESS.md).
@@ -25,10 +27,15 @@ Current status and recorded evidence live in
   `TSpan<const std::uint8_t>` and reports position and remaining. An invalid
   backing span is rejected as `Invalid` without dereferencing null. A failed
   read does not advance the cursor or modify output parameters.
-- `INetDriver` exposes one bounded non-blocking `TrySend` and one bounded
-  non-blocking `TryReceive` over caller-owned byte spans. Every receive is
-  transactional: on `Full`, `Invalid`, or `Unavailable` the destination and
+- `INetDriver` exposes one bounded non-blocking `TrySend(const FNetAddress&
+  To, …)` and one bounded non-blocking `TryReceive(FNetAddress& OutFrom, …)`
+  over caller-owned byte spans. Every receive is transactional: on `Full`,
+  `Invalid`, or `Unavailable` the destination and
   `FNetReceiveResult::BytesReceived` are unchanged.
+- `FNetAddress` is an opaque, bounded address (a fixed byte array plus a size)
+  carried by `INetDriver` sends and receives. Its concrete encoding is owned
+  by the platform adapter (e.g. 6-byte IPv4+port for UDP, 1-byte node id for
+  LoRa), not by Net.
 - `FNetPacketStorage<MaxPackets, MaxPacketBytes>` is the smallest fixed
   storage type the manager needs; both capacities must be nonzero. The caller
   constructs one instance and lends it to the manager by reference.
@@ -37,11 +44,45 @@ Current status and recorded evidence live in
   complete packets into that storage, attempts at most the FIFO head per send
   advance (retaining the head on any driver failure), and performs at most one
   direct driver receive.
-- `FHostLoopback<CapacityPackets, PacketBytes>` is a deterministic fixed-
-  capacity loopback driver for host tests.
+- **Networking with roles** — `TNetHost<MaxPeers, MaxPacketBytes>` runs one of
+  four `ENetMode` values (`Standalone`, `Client`, `ListenServer`,
+  `DedicatedServer`) over a bounded peer table. It performs Hello/Welcome
+  admission, heartbeat keepalive, and timeout eviction, exposes
+  generation-checked `FPeerId` handles, and is driven entirely by
+  caller-invoked `PumpReceive` / `PumpSend` against caller-supplied time (no
+  hidden clock, no hidden allocation). Channel 0 carries control messages
+  internally; channels 1..255 are delivered to a bounded multicast delegate.
+  This is simple channel messaging, not replication or RPC.
+- **Wire framing** — `Net/FrameCodec.h` is a portable, host-testable header
+  with `ComputeCrc16Ccitt` (CRC-16/CCITT-FALSE: poly `0x1021`, init `0xFFFF`,
+  no reflection, xorout `0x0000`), the transactional `EncodeFrame`, and the
+  bounded `TFrameDecoder<MaxPayloadBytes>` state machine that resyncs on bad
+  magic / oversize length / CRC mismatch. The E32 LoRa adapter uses it for
+  on-the-wire framing.
+- `FHostLoopback<MaxPorts, MailboxCapacity, PacketBytes>` is a deterministic
+  fixed-capacity loopback network (N embedded per-port `INetDriver`s sharing
+  one mailroom) for host tests.
 
-The application owns the driver, the packet storage, the manager value, and
-all fixed buffers.
+The application owns the driver, the packet storage, the manager value, the
+net host value, and all fixed buffers.
+
+## Real transports
+
+Real transports live in the **platform adapter packages**, which are
+non-portable (they may include OS/vendor headers) and are excluded from
+`CheckDependencyBoundaries.py`:
+
+- [`microworld-platform-host`](../microworld-platform-host) — `FHostUdpDriver`
+  over a host UDP socket (`127.0.0.1`), with `MakeUdpAddress` /
+  `IsUdpAddress` / `UdpAddressPort` for the 6-byte IPv4+port `FNetAddress`
+  encoding.
+- [`microworld-platform-esp32`](../microworld-platform-esp32) —
+  `FEsp32UdpDriver` over lwIP, `FEsp32E32LoraDriver` over the E32 UART, and
+  `Esp32LogSink`; the same UDP address helpers are duplicated verbatim (each
+  adapter is self-contained; the encoding never crosses the wire).
+
+Both depend inward on Net (and Core/Memory); the reverse dependency is
+forbidden.
 
 ## Build
 
@@ -54,6 +95,7 @@ ctest --test-dir <build-directory> --output-on-failure
 CMake consumers link `MicroWorld::Net`. A successful compile or host test
 does not establish target runtime margins or hardware behavior.
 
-Net does not provide wire framing, sessions, retries, reliability,
-authentication, real transports, replication, platform abstraction, or
-hardware APIs.
+Net does not provide delivery retries, reliability guarantees,
+authentication, replication/RPC, platform abstraction, or hardware APIs.
+(Wire framing via `FrameCodec` and sessions via `TNetHost` are in Net; real
+transports are provided by the platform adapter packages above.)

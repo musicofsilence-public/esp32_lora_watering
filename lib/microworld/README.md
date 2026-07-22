@@ -1,4 +1,4 @@
-# MicroWorld Core 0.1.0
+# MicroWorld Core 0.2.0
 
 MicroWorld Core is a standalone C++17 lifecycle and tick runtime for bounded
 embedded applications. It has no ESP32, RTOS, transport, or product-policy
@@ -81,11 +81,31 @@ hardware authorization.
 
 ## Next scope
 
-The minimal managed Engine (`UWorld`, `AActor`, `UActorComponent`), the Simple
-Timers milestone (`TTimerManager`), and the Simple Net milestone
-(`FByteWriter`/`FByteReader`, `INetDriver`, `FNetManager`, `FHostLoopback`)
-are accepted implementation candidates. The next scope is one ESP32-S3 example
-that demonstrates the completed runtime on the existing ESP32-S3 configuration.
+The 0.2.0 release has delivered the surrounding runtime that sits on Core:
+
+- **Engine** — managed `UWorld` / `AActor` / `UActorComponent` with fixed
+  registration, runtime `SpawnActor` / `DestroyActor` at a deferred
+  `ApplyPending` barrier, and bounded `TTimerManager` timers.
+- **`TEngineHost`** — the composition root wiring class registry, object
+  store, garbage collector, world, timers, and (optionally) a network frame
+  behind one fixed 7-step per-frame order.
+- **Net** — simple messages with roles: `TNetHost<MaxPeers, MaxPacketBytes>`
+  over `ENetMode` (Standalone / Client / ListenServer / DedicatedServer) with
+  a bounded peer table, hello/heartbeat/timeout sessions, and channel-based
+  send/receive.
+- **Platform adapters** — `microworld-platform-host` (UDP) and
+  `microworld-platform-esp32` (UDP + E32 LoRa UART) supply the real
+  transports; the portable `Net/FrameCodec.h` provides CRC-16/CCITT-FALSE
+  framing for the LoRa adapter.
+- **Two-node demo** — `lib/microworld-platform-host/examples/TwoNodeDemo` is
+  the acceptance demo (dedicated server + bare client over real localhost UDP).
+- **ESP32-S3 margins measured** — tick / GC-slice / net-pump / heap / stack
+  captured on physical ESP32-S3 @ 160 MHz; see the platform-esp32 results
+  file.
+
+Core itself still provides only primitives — spawn/destroy, timers, and
+networking live in Engine and Net, not Core. Live state and exact evidence are
+recorded in [PROGRESS.md](PROGRESS.md).
 
 Core does not provide runtime spawn/destroy, timers, networking policy,
 reflection, hardware abstraction, or a real-time guarantee.
@@ -96,5 +116,6 @@ reflection, hardware abstraction, or a real-time guarantee.
 - [Package architecture](docs/ModulePackaging.md)
 - [Concept map](docs/UE5ConceptMap.md)
 - [Resource rules](docs/ResourceBudgets.md)
+- [Porting to a new platform](docs/Porting.md)
 - [Host benchmark](benchmarks/Results/Host.md)
 - [ESP32-S3 compile evidence](benchmarks/Results/Esp32S3N16R8.md)

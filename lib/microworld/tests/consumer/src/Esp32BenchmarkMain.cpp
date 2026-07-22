@@ -211,7 +211,7 @@ volatile int BenchmarkSinkResult = -1;
  * Sized so MaxSweepOperations(8) is below the slot count(32), forcing a
  * multi-slice cycle: each Advance call is one measurable pause rather than a
  * whole cycle completing in a single call. One object is rooted; the rest are
- * unreferenced garbage the sweep phase reclaims slice by slice. The store and
+ * unreferenced garbage the sweep phase reclaims slice by slice; the store and
  * collector are non-movable, so like ObjectConsumerProbe.h this probe declares
  * the backing storage as members and constructs the store/collector eagerly in
  * the member-init list in declaration order.

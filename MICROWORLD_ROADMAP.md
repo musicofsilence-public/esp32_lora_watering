@@ -1451,16 +1451,44 @@ platform-free (dependency checker must keep passing).
   invisible to the compile-only Part A proof) and were fixed in the harness —
   see the §6 decision row dated 2026-07-21 (Phase 6.2 Part B).
 
-- [ ] **6.3 Documentation release sweep.** Update: `lib/microworld/README.md`,
+- [x] **6.3 Documentation release sweep.** Update: `lib/microworld/README.md`,
   `lib/microworld-engine/README.md`, `lib/microworld-net/README.md`,
   `UE5ConceptMap.md` (add Spawn/Destroy, TEngineHost, ENetMode/TNetHost rows),
   `Porting.md` (how to write a platform adapter: time source + net driver +
   log sink = one page), `PROGRESS.md` final status, `CHANGELOG.md`, bump
   version to `0.2.0` in `Version.h`. Run all checker scripts.
+  **Completed (2026-07-21):** documentation-only sweep reflecting the shipped
+  0.2.0 reality plus the version bump. `Version.h` → `0.2.0`; package
+  `project(... VERSION ...)` and `library.json` version fields bumped across
+  all seven packages; the four Core consumer probes' `Version.Minor`
+  static_asserts moved to 2 so the host-core build still links. Core/Engine/
+  Net READMEs, `UE5ConceptMap.md`, `Porting.md` (rewritten as a one-page
+  three-seam adapter guide), `PROGRESS.md` (0.2.0 release-ready), and
+  `CHANGELOG.md` (`## 0.2.0 - 2026-07-21` entry) updated; root `README.md`
+  moved to 0.2.0. Added `lib/microworld/docs/diagrams/AGENTS.md` to close the
+  pre-existing `CheckFolderAgents.py` gap. The 0.1.0 CHANGELOG history entry
+  and dated `benchmarks/Results/` evidence were left intact. Verify gate
+  (GCC 16.1.0 via Ninja): `CheckClassDocumentation.py`,
+  `CheckFolderAgents.py`, `CheckDependencyBoundaries.py --self-test` +
+  `--package Core=lib/microworld` pass; `clang-format --dry-run --Werror` on
+  `Version.h` clean; `host-core` CTest 5/5 and `host-eng` CTest 1/1 pass;
+  full portable-package dependency sweep passes (5 packages, 52 files).
 
-- [ ] **6.4 Final acceptance.** All packages build + test on host; ESP32
+- [x] **6.4 Final acceptance.** All packages build + test on host; ESP32
   images compile; dependency/doc checkers pass; the two-node demo runs; this
   document's tracker is fully ✅ except this line, which flips last.
+  **Completed (2026-07-22):** independent lead-engineer acceptance sweep.
+  Six host packages configure/build/ctest green under strict warnings
+  (`-Wall -Wextra -Wpedantic -Werror`; Core 5/5, the rest via their aggregate
+  runners). All seven consumer ESP32 envs compile (`esp32-s3`, `-memory`,
+  `-object`, `-engine`, `-net`, `-platform`, `-benchmark`); `-platform` passed
+  on an isolated rebuild after a transient bootloader-subproject race in the
+  back-to-back batch (the same file compiled cleanly in this env's app tree
+  and in `-benchmark`). `CheckClassDocumentation.py` (31 files),
+  `CheckFolderAgents.py` (17 guides), and `CheckDependencyBoundaries.py`
+  (5 packages, 52 files) pass. The host two-node UDP demo runs to completion
+  (exit 0: connect → spawn ×2 → state broadcast → client receipt). This is the
+  0.2.0 release.
 
 ---
 
@@ -1505,7 +1533,7 @@ of its tasks starts, ✅ only when all its tasks are `[x]`.
 | 3 | Composition root & logging | 3.1–3.4 | ✅ |
 | 4 | Networking with roles | 4.1–4.4 | ✅ |
 | 5 | Platform adapters | 5.1–5.3 | ✅ |
-| 6 | Examples, measurement, release | 6.1–6.4 | 🟨 |
+| 6 | Examples, measurement, release | 6.1–6.4 | ✅ |
 
 **Definition of "production ready" (exit criteria):** Phase 6 task 6.4 checked;
 version 0.2.0 tagged; a UE5 developer can, following only the READMEs, build a
